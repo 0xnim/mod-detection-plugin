@@ -1,0 +1,4 @@
+name: Mod Detector Plugin
+version: '0.1.0'
+main: xyz.nim.modDetectorPlugin.ModDetectorPlugin
+api-version: '1.21'
