@@ -1,4 +1,16 @@
-name: Mod Detector Plugin
-version: '0.1.0'
+name: ModDetectorPlugin
+version: '${version}'
 main: xyz.nim.modDetectorPlugin.ModDetectorPlugin
 api-version: '1.21'
+description: Detects and filters client mods via plugin message channels
+
+permissions:
+  moddetector.admin:
+    description: Allows use of ModDetector admin commands
+    default: op
+  moddetector.notify:
+    description: Receives notifications when mods are detected
+    default: op
+  moddetector.bypass:
+    description: Bypass mod detection (not kicked)
+    default: false

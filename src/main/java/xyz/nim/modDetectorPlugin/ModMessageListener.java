@@ -1,0 +1,136 @@
+package xyz.nim.modDetectorPlugin;
+
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.minimessage.MiniMessage;
+import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
+import org.bukkit.Bukkit;
+import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.PlayerRegisterChannelEvent;
+import org.bukkit.plugin.messaging.PluginMessageListener;
+
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+
+public class ModMessageListener implements Listener, PluginMessageListener {
+
+    private final ModDetectorPlugin plugin;
+    private final ModFilterConfig config;
+    private final MiniMessage miniMessage = MiniMessage.miniMessage();
+
+    private final Map<UUID, Set<String>> detectedChannels = new ConcurrentHashMap<>();
+    private final Set<UUID> pendingKicks = ConcurrentHashMap.newKeySet();
+
+    public ModMessageListener(ModDetectorPlugin plugin, ModFilterConfig config) {
+        this.plugin = plugin;
+        this.config = config;
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST)
+    public void onChannelRegister(PlayerRegisterChannelEvent event) {
+        Player player = event.getPlayer();
+        String channel = event.getChannel();
+
+        if (config.isDebug()) {
+            plugin.getLogger().info("[DEBUG] Player " + player.getName() + " registered channel: " + channel);
+        }
+
+        if (player.hasPermission("moddetector.bypass")) {
+            return;
+        }
+
+        if (config.shouldBlock(channel)) {
+            handleBlockedChannel(player, channel);
+        }
+    }
+
+    @Override
+    public void onPluginMessageReceived(String channel, Player player, byte[] message) {
+        if (config.isDebug()) {
+            plugin.getLogger().info("[DEBUG] Received plugin message from " + player.getName() + " on channel: " + channel);
+        }
+
+        if (player.hasPermission("moddetector.bypass")) {
+            return;
+        }
+
+        if (config.shouldBlock(channel)) {
+            handleBlockedChannel(player, channel);
+        }
+    }
+
+    @EventHandler
+    public void onPlayerQuit(PlayerQuitEvent event) {
+        UUID uuid = event.getPlayer().getUniqueId();
+        detectedChannels.remove(uuid);
+        pendingKicks.remove(uuid);
+    }
+
+    private void handleBlockedChannel(Player player, String channel) {
+        UUID uuid = player.getUniqueId();
+        ModFilterConfig.Action action = config.getAction();
+
+        String modName = config.getModName(channel);
+        detectedChannels.computeIfAbsent(uuid, k -> ConcurrentHashMap.newKeySet()).add(modName);
+
+        if (action == ModFilterConfig.Action.LOG || action == ModFilterConfig.Action.BOTH) {
+            String logMessage = config.formatLogMessage(player.getName(), channel);
+            plugin.getLogger().warning(logMessage);
+        }
+
+        if (config.isNotifyAdmins()) {
+            notifyAdmins(player, modName, channel);
+        }
+
+        if (action == ModFilterConfig.Action.KICK || action == ModFilterConfig.Action.BOTH) {
+            if (pendingKicks.add(uuid)) {
+                Bukkit.getScheduler().runTaskLater(plugin, () -> executeKick(player), 20L);
+            }
+        }
+    }
+
+    private void executeKick(Player player) {
+        UUID uuid = player.getUniqueId();
+        pendingKicks.remove(uuid);
+
+        if (!player.isOnline()) {
+            detectedChannels.remove(uuid);
+            return;
+        }
+
+        Set<String> channels = detectedChannels.remove(uuid);
+        if (channels == null || channels.isEmpty()) {
+            return;
+        }
+
+        String modList = String.join(", ", channels);
+        Component kickComponent = miniMessage.deserialize(
+                config.getKickMessageFormat(),
+                Placeholder.unparsed("mods", modList)
+        );
+
+        player.kick(kickComponent);
+    }
+
+    private void notifyAdmins(Player offender, String modName, String channel) {
+        Component message = Component.text("[ModDetector] ", NamedTextColor.RED)
+                .append(Component.text(offender.getName(), NamedTextColor.YELLOW))
+                .append(Component.text(" detected using: ", NamedTextColor.GRAY))
+                .append(Component.text(modName, NamedTextColor.GOLD))
+                .append(Component.text(" (" + channel + ")", NamedTextColor.DARK_GRAY));
+
+        for (Player admin : Bukkit.getOnlinePlayers()) {
+            if (admin.hasPermission("moddetector.notify")) {
+                admin.sendMessage(message);
+            }
+        }
+
+        Bukkit.getConsoleSender().sendMessage(message);
+    }
+}

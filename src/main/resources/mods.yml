@@ -1,0 +1,113 @@
+# Known Mod Definitions
+# Each mod has a name, description, and list of channel patterns
+
+mods:
+  xaeros-worldmap:
+    name: "Xaero's World Map"
+    description: "Full world map mod"
+    channels:
+      - "xaeroworldmap:*"
+
+  xaeros-minimap:
+    name: "Xaero's Minimap"
+    description: "Minimap mod"
+    channels:
+      - "xaerominimap:*"
+
+  jade:
+    name: "Jade"
+    description: "Block/entity information overlay (HWYLA fork)"
+    channels:
+      - "jade:*"
+
+  journeymap:
+    name: "JourneyMap"
+    description: "Real-time mapping mod"
+    channels:
+      - "journeymap:*"
+
+  litematica:
+    name: "Litematica"
+    description: "Schematic mod (via Servux)"
+    channels:
+      - "servux:litematics"
+
+  minihud:
+    name: "MiniHUD"
+    description: "HUD overlay mod (via Servux)"
+    channels:
+      - "servux:structures"
+      - "servux:hud_metadata"
+
+  servux:
+    name: "Servux"
+    description: "Server-side data provider (blocks all Servux features)"
+    channels:
+      - "servux:*"
+
+  simple-voice-chat:
+    name: "Simple Voice Chat"
+    description: "Voice chat mod"
+    channels:
+      - "voicechat:*"
+
+  noxesium:
+    name: "Noxesium"
+    description: "Performance/feature mod for MCC and servers"
+    channels:
+      - "noxesium-v2:*"
+
+  flashback:
+    name: "Flashback"
+    description: "Replay recording mod (ReplayMod alternative)"
+    channels:
+      - "flashback:*"
+
+  appleskin:
+    name: "AppleSkin"
+    description: "Food/hunger HUD additions showing saturation"
+    channels:
+      - "appleskin:*"
+
+  bindcmd:
+    name: "BindCmd"
+    description: "Bind commands to keys"
+    channels:
+      - "bindcmd:*"
+
+  showmeyourskin:
+    name: "Show Me Your Skin"
+    description: "Armor visibility customization mod"
+    channels:
+      - "showmeyourskin:*"
+
+  worldinfo:
+    name: "WorldInfo"
+    description: ".."
+    channels:
+      - "worldinfo:*"
+
+  fabric-api:
+    name: "Fabric API"
+    description: "Fabric mod loader core API"
+    channels:
+      - "fabric:*"
+      - "fabric-screen-handler-api-v1:*"
+
+  cardinal-components:
+    name: "Cardinal Components API"
+    description: ".."
+    channels:
+      - "cardinal-components:*"
+
+  architectury:
+    name: "Architectury API"
+    description: "Cross-platform mod development API"
+    channels:
+      - "architectury:*"
+
+  forgeconfigapiport:
+    name: "Forge Config API Port"
+    description: "Forge config system ported to Fabric"
+    channels:
+      - "forgeconfigapiport:*"

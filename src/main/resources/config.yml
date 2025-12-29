@@ -1,0 +1,48 @@
+# Mod Detector Plugin Configuration
+
+# Mode: "whitelist" or "blacklist"
+# - whitelist: Only allow listed mods/patterns, block everything else
+# - blacklist: Block listed mods/patterns, allow everything else
+mode: blacklist
+
+# Action to take when a blocked channel is detected
+# Options: "kick", "log", "both"
+action: both
+
+# Kick message shown to players when kicked for using blocked mods
+# Uses MiniMessage format: https://docs.advntr.dev/minimessage/format.html
+# Use <mods> placeholder to show the list of detected mods
+kick-message: "<red>You have been kicked for using disallowed client mods:</red><newline><yellow><mods></yellow>"
+
+# Log format for detected mods
+log-format: "[ModDetector] Player %player% sent plugin message on channel: %channel%"
+
+# ============================================
+# MOD BLOCKING CONFIGURATION
+# ============================================
+
+# Block mods by their ID (defined in mods.yml)
+# Use the mod ID (e.g., "xaeros-worldmap", "jade")
+# See mods.yml for all available mod IDs and their descriptions
+blocked-mods:
+  - xaeros-worldmap
+  - xaeros-minimap
+  - jade
+  - journeymap
+
+# Additional custom channel patterns to block
+# Use * as wildcard (e.g., "someclient:*" matches any channel starting with "someclient:")
+# These are checked IN ADDITION to blocked-mods above
+custom-patterns: []
+#  - "custommod:*"
+#  - "specificchannel:data"
+
+# ============================================
+# OTHER SETTINGS
+# ============================================
+
+# Whether to log all incoming plugin messages (useful for discovering mod channels)
+debug: false
+
+# Notify players with permission "moddetector.notify" when a mod is detected
+notify-admins: true
