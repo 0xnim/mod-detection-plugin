@@ -22,14 +22,16 @@ public class ModMessageListener implements Listener, PluginMessageListener {
 
     private final ModDetectorPlugin plugin;
     private final ModFilterConfig config;
+    private final DetectionLogger detectionLogger;
     private final MiniMessage miniMessage = MiniMessage.miniMessage();
 
     private final Map<UUID, Set<String>> detectedChannels = new ConcurrentHashMap<>();
     private final Set<UUID> pendingKicks = ConcurrentHashMap.newKeySet();
 
-    public ModMessageListener(ModDetectorPlugin plugin, ModFilterConfig config) {
+    public ModMessageListener(ModDetectorPlugin plugin, ModFilterConfig config, DetectionLogger detectionLogger) {
         this.plugin = plugin;
         this.config = config;
+        this.detectionLogger = detectionLogger;
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
@@ -67,8 +69,14 @@ public class ModMessageListener implements Listener, PluginMessageListener {
 
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
-        UUID uuid = event.getPlayer().getUniqueId();
-        detectedChannels.remove(uuid);
+        Player player = event.getPlayer();
+        UUID uuid = player.getUniqueId();
+
+        Set<String> channels = detectedChannels.remove(uuid);
+        if (channels != null && !channels.isEmpty() && config.getAction() == ModFilterConfig.Action.LOG) {
+            detectionLogger.logDetection(player, channels);
+        }
+
         pendingKicks.remove(uuid);
     }
 
@@ -108,6 +116,8 @@ public class ModMessageListener implements Listener, PluginMessageListener {
         if (channels == null || channels.isEmpty()) {
             return;
         }
+
+        detectionLogger.logDetection(player, channels);
 
         String modList = String.join(", ", channels);
         Component kickComponent = miniMessage.deserialize(

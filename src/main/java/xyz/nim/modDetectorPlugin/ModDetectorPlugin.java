@@ -14,13 +14,15 @@ public final class ModDetectorPlugin extends JavaPlugin {
 
     private ModFilterConfig modFilterConfig;
     private ModMessageListener messageListener;
+    private DetectionLogger detectionLogger;
 
     @Override
     public void onEnable() {
         modFilterConfig = new ModFilterConfig(this);
         modFilterConfig.load();
 
-        messageListener = new ModMessageListener(this, modFilterConfig);
+        detectionLogger = new DetectionLogger(this);
+        messageListener = new ModMessageListener(this, modFilterConfig, detectionLogger);
 
         getServer().getPluginManager().registerEvents(messageListener, this);
 
@@ -58,6 +60,8 @@ public final class ModDetectorPlugin extends JavaPlugin {
                                                 .append(Component.text(modFilterConfig.isDebug() ? "enabled" : "disabled", NamedTextColor.YELLOW)));
                                         sender.sendMessage(Component.text("Notify Admins: ", NamedTextColor.GRAY)
                                                 .append(Component.text(modFilterConfig.isNotifyAdmins() ? "enabled" : "disabled", NamedTextColor.YELLOW)));
+                                        sender.sendMessage(Component.text("Track Detections: ", NamedTextColor.GRAY)
+                                                .append(Component.text(modFilterConfig.isTrackDetections() ? "enabled" : "disabled", NamedTextColor.YELLOW)));
                                         return Command.SINGLE_SUCCESS;
                                     }))
                             .then(Commands.literal("debug")

@@ -51,6 +51,7 @@ public class ModFilterConfig {
     private List<Pattern> patterns;
     private boolean debug;
     private boolean notifyAdmins;
+    private boolean trackDetections;
 
     private final Map<String, ModDefinition> knownMods = new HashMap<>();
     private final Map<Pattern, String> patternToModName = new HashMap<>();
@@ -84,6 +85,7 @@ public class ModFilterConfig {
         this.logFormat = config.getString("log-format", "[ModDetector] Player %player% sent plugin message on channel: %channel%");
         this.debug = config.getBoolean("debug", false);
         this.notifyAdmins = config.getBoolean("notify-admins", true);
+        this.trackDetections = config.getBoolean("track-detections", true);
 
         this.patterns.clear();
         this.patternToModName.clear();
@@ -225,6 +227,10 @@ public class ModFilterConfig {
 
     public boolean isNotifyAdmins() {
         return notifyAdmins;
+    }
+
+    public boolean isTrackDetections() {
+        return trackDetections;
     }
 
     public String formatLogMessage(String playerName, String channel) {
