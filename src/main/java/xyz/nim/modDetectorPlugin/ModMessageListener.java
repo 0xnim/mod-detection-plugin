@@ -85,7 +85,8 @@ public class ModMessageListener implements Listener, PluginMessageListener {
         ModFilterConfig.Action action = config.getAction();
 
         String modName = config.getModName(channel);
-        detectedChannels.computeIfAbsent(uuid, k -> ConcurrentHashMap.newKeySet()).add(modName);
+        Set<String> playerMods = detectedChannels.computeIfAbsent(uuid, k -> ConcurrentHashMap.newKeySet());
+        boolean isNewDetection = playerMods.add(modName);
 
         if (action == ModFilterConfig.Action.LOG || action == ModFilterConfig.Action.BOTH) {
             String logMessage = config.formatLogMessage(player.getName(), channel);
@@ -100,6 +101,9 @@ public class ModMessageListener implements Listener, PluginMessageListener {
             if (pendingKicks.add(uuid)) {
                 Bukkit.getScheduler().runTaskLater(plugin, () -> executeKick(player), 20L);
             }
+        } else if (action == ModFilterConfig.Action.LOG && isNewDetection) {
+            // In LOG-only mode, write to file immediately for each new detection
+            detectionLogger.logDetection(player, Set.of(modName));
         }
     }
 
@@ -126,6 +130,10 @@ public class ModMessageListener implements Listener, PluginMessageListener {
         );
 
         player.kick(kickComponent);
+    }
+
+    public Map<UUID, Set<String>> getDetectedChannels() {
+        return detectedChannels;
     }
 
     private void notifyAdmins(Player offender, String modName, String channel) {

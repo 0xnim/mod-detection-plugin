@@ -81,6 +81,34 @@ public final class ModDetectorPlugin extends JavaPlugin {
                                                     .append(Component.text(" - " + mod.getName(), NamedTextColor.WHITE))
                                                     .append(Component.text(" (" + mod.getDescription() + ")", NamedTextColor.GRAY)));
                                         });
+                                        var customMods = modFilterConfig.getCustomMods();
+                                        if (!customMods.isEmpty()) {
+                                            sender.sendMessage(Component.text("=== Custom Mods ===", NamedTextColor.GOLD));
+                                            customMods.values().forEach(mod -> {
+                                                sender.sendMessage(Component.text("  " + mod.getId(), NamedTextColor.AQUA)
+                                                        .append(Component.text(" - " + mod.getName(), NamedTextColor.WHITE))
+                                                        .append(Component.text(" (" + mod.getDescription() + ")", NamedTextColor.GRAY)));
+                                            });
+                                        }
+                                        return Command.SINGLE_SUCCESS;
+                                    }))
+                            .then(Commands.literal("players")
+                                    .executes(ctx -> {
+                                        var sender = ctx.getSource().getSender();
+                                        var detected = messageListener.getDetectedChannels();
+                                        if (detected.isEmpty()) {
+                                            sender.sendMessage(Component.text("[ModDetector] No players with detected mods currently online.", NamedTextColor.YELLOW));
+                                            return Command.SINGLE_SUCCESS;
+                                        }
+                                        sender.sendMessage(Component.text("=== Players with Detected Mods ===", NamedTextColor.GOLD));
+                                        detected.forEach((uuid, mods) -> {
+                                            var player = getServer().getPlayer(uuid);
+                                            if (player != null && player.isOnline()) {
+                                                sender.sendMessage(Component.text("  " + player.getName(), NamedTextColor.YELLOW)
+                                                        .append(Component.text(": ", NamedTextColor.GRAY))
+                                                        .append(Component.text(String.join(", ", mods), NamedTextColor.RED)));
+                                            }
+                                        });
                                         return Command.SINGLE_SUCCESS;
                                     }))
                             .executes(ctx -> {
@@ -92,6 +120,8 @@ public final class ModDetectorPlugin extends JavaPlugin {
                                         .append(Component.text(" - Show current status", NamedTextColor.GRAY)));
                                 sender.sendMessage(Component.text("/moddetector mods", NamedTextColor.YELLOW)
                                         .append(Component.text(" - List known mod IDs", NamedTextColor.GRAY)));
+                                sender.sendMessage(Component.text("/moddetector players", NamedTextColor.YELLOW)
+                                        .append(Component.text(" - Show tracked players with mods", NamedTextColor.GRAY)));
                                 sender.sendMessage(Component.text("/moddetector debug", NamedTextColor.YELLOW)
                                         .append(Component.text(" - Show debug status", NamedTextColor.GRAY)));
                                 return Command.SINGLE_SUCCESS;

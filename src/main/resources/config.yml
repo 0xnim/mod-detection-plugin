@@ -7,6 +7,10 @@ mode: blacklist
 
 # Action to take when a blocked channel is detected
 # Options: "kick", "log", "both"
+#
+# SILENT LISTENER MODE: Set action to "log" and notify-admins to false
+# Players will be tracked without being kicked or notified.
+# Use /moddetector players to see online players with detected mods.
 action: both
 
 # Kick message shown to players when kicked for using blocked mods
@@ -30,9 +34,33 @@ blocked-mods:
   - jade
   - journeymap
 
-# Additional custom channel patterns to block
+# ============================================
+# CUSTOM MOD DEFINITIONS
+# ============================================
+# Define your own mods with the same features as built-in mods.
+# Custom mods can be referenced in blocked-mods by their ID.
+#
+# Example:
+# custom-mods:
+#   my-cheat-client:
+#     name: "Cheat Client"
+#     description: "Known cheat client used on our server"
+#     channels:
+#       - "cheaty:*"
+#       - "cheaty-utils:main"
+#   another-mod:
+#     name: "Another Mod"
+#     description: "Some other mod to detect"
+#     channels:
+#       - "anothermod:*"
+#
+# Then add to blocked-mods: my-cheat-client, another-mod
+custom-mods: {}
+
+# Additional custom channel patterns to block (simple mode)
 # Use * as wildcard (e.g., "someclient:*" matches any channel starting with "someclient:")
 # These are checked IN ADDITION to blocked-mods above
+# Note: For better organization, consider using custom-mods instead
 custom-patterns: []
 #  - "custommod:*"
 #  - "specificchannel:data"

@@ -2,6 +2,30 @@
 
 All notable changes to ModDetectorPlugin will be documented in this file.
 
+## [1.1.0] - 2026-01-03
+
+### Added
+
+- **Silent Listener Mode**
+  - Set `action: log` and `notify-admins: false` to track players without kicking
+  - Detections logged immediately to file (not just on player quit)
+  - Use `/moddetector players` to view online players with detected mods
+
+- **`/moddetector players` Command**
+  - Shows all online players with their detected mods
+  - Useful for monitoring without taking action
+
+- **Custom Mod Definitions**
+  - New `custom-mods` config section with full mod definition support
+  - Define ID, name, description, and multiple channel patterns
+  - Custom mods shown in `/moddetector mods` command
+  - Same features as built-in mod definitions
+
+### Changed
+
+- Immediate file logging in LOG mode (previously only logged on player quit)
+- Updated config.yml with custom-mods documentation and examples
+
 ## [1.0.0] - 2026-01-03
 
 ### Initial Release

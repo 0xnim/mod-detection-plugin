@@ -54,6 +54,7 @@ public class ModFilterConfig {
     private boolean trackDetections;
 
     private final Map<String, ModDefinition> knownMods = new HashMap<>();
+    private final Map<String, ModDefinition> customMods = new HashMap<>();
     private final Map<Pattern, String> patternToModName = new HashMap<>();
 
     private final ModDetectorPlugin plugin;
@@ -87,12 +88,20 @@ public class ModFilterConfig {
         this.notifyAdmins = config.getBoolean("notify-admins", true);
         this.trackDetections = config.getBoolean("track-detections", true);
 
+        loadCustomMods(config);
+
         this.patterns.clear();
         this.patternToModName.clear();
 
         List<String> blockedModIds = config.getStringList("blocked-mods");
         for (String modId : blockedModIds) {
-            ModDefinition mod = knownMods.get(modId.toLowerCase());
+            String modIdLower = modId.toLowerCase();
+            // Check both known mods and custom mods
+            ModDefinition mod = knownMods.get(modIdLower);
+            if (mod == null) {
+                mod = customMods.get(modIdLower);
+            }
+
             if (mod != null) {
                 for (String channel : mod.getChannels()) {
                     Pattern pattern = wildcardToRegex(channel);
@@ -113,6 +122,35 @@ public class ModFilterConfig {
         }
 
         plugin.getLogger().info("Loaded " + patterns.size() + " channel patterns in " + mode + " mode");
+    }
+
+    private void loadCustomMods(FileConfiguration config) {
+        customMods.clear();
+
+        ConfigurationSection customModsSection = config.getConfigurationSection("custom-mods");
+        if (customModsSection == null) {
+            return;
+        }
+
+        for (String modId : customModsSection.getKeys(false)) {
+            ConfigurationSection modSection = customModsSection.getConfigurationSection(modId);
+            if (modSection == null) continue;
+
+            String name = modSection.getString("name", modId);
+            String description = modSection.getString("description", "Custom mod");
+            List<String> channels = modSection.getStringList("channels");
+
+            if (channels.isEmpty()) {
+                plugin.getLogger().warning("Custom mod '" + modId + "' has no channels defined, skipping");
+                continue;
+            }
+
+            customMods.put(modId.toLowerCase(), new ModDefinition(modId, name, description, channels));
+        }
+
+        if (!customMods.isEmpty()) {
+            plugin.getLogger().info("Loaded " + customMods.size() + " custom mod definitions");
+        }
     }
 
     private void loadKnownMods() {
@@ -203,6 +241,10 @@ public class ModFilterConfig {
 
     public Map<String, ModDefinition> getKnownMods() {
         return knownMods;
+    }
+
+    public Map<String, ModDefinition> getCustomMods() {
+        return customMods;
     }
 
     public Mode getMode() {
