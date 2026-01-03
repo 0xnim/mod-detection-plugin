@@ -1,12 +1,13 @@
 package xyz.nim.modDetectorPlugin;
 
-import org.bukkit.entity.Player;
+import com.velocitypowered.api.proxy.Player;
 
 import java.io.BufferedWriter;
-import java.io.File;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Set;
@@ -17,37 +18,37 @@ public class DetectionLogger {
     private static final DateTimeFormatter TIMESTAMP_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     private final ModDetectorPlugin plugin;
-    private final File logFile;
+    private final Path logFile;
 
     public DetectionLogger(ModDetectorPlugin plugin) {
         this.plugin = plugin;
-        this.logFile = new File(plugin.getDataFolder(), "detections.txt");
+        this.logFile = plugin.getDataDirectory().resolve("detections.txt");
         ensureLogFileExists();
     }
 
     private void ensureLogFileExists() {
-        if (!plugin.getDataFolder().exists()) {
-            plugin.getDataFolder().mkdirs();
-        }
-
-        if (!logFile.exists()) {
-            try {
-                logFile.createNewFile();
-                writeHeader();
-            } catch (IOException e) {
-                plugin.getLogger().warning("Failed to create detections.txt: " + e.getMessage());
+        try {
+            if (!Files.exists(plugin.getDataDirectory())) {
+                Files.createDirectories(plugin.getDataDirectory());
             }
+
+            if (!Files.exists(logFile)) {
+                Files.createFile(logFile);
+                writeHeader();
+            }
+        } catch (IOException e) {
+            plugin.getLogger().warn("Failed to create detections.txt: " + e.getMessage());
         }
     }
 
     private void writeHeader() {
-        try (PrintWriter writer = new PrintWriter(new FileWriter(logFile, false))) {
+        try (PrintWriter writer = new PrintWriter(Files.newBufferedWriter(logFile))) {
             writer.println("# ModDetector - Player Detection Log");
             writer.println("# Format: [timestamp] UUID | Username | Detected Mods");
             writer.println("# ================================================");
             writer.println();
         } catch (IOException e) {
-            plugin.getLogger().warning("Failed to write header to detections.txt: " + e.getMessage());
+            plugin.getLogger().warn("Failed to write header to detections.txt: " + e.getMessage());
         }
     }
 
@@ -57,16 +58,17 @@ public class DetectionLogger {
         }
 
         UUID uuid = player.getUniqueId();
-        String username = player.getName();
+        String username = player.getUsername();
         String timestamp = LocalDateTime.now().format(TIMESTAMP_FORMAT);
         String mods = String.join(", ", detectedMods);
 
         String logEntry = String.format("[%s] %s | %s | %s", timestamp, uuid, username, mods);
 
-        try (PrintWriter writer = new PrintWriter(new BufferedWriter(new FileWriter(logFile, true)))) {
+        try (PrintWriter writer = new PrintWriter(new BufferedWriter(
+                Files.newBufferedWriter(logFile, StandardOpenOption.APPEND)))) {
             writer.println(logEntry);
         } catch (IOException e) {
-            plugin.getLogger().warning("Failed to write detection to log: " + e.getMessage());
+            plugin.getLogger().warn("Failed to write detection to log: " + e.getMessage());
         }
 
         if (plugin.getModFilterConfig().isDebug()) {
@@ -74,7 +76,7 @@ public class DetectionLogger {
         }
     }
 
-    public File getLogFile() {
+    public Path getLogFile() {
         return logFile;
     }
 }
