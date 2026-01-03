@@ -1,0 +1,85 @@
+name: Add Mod to Detection List
+description: Request a new mod to be added to the detection list
+title: "[Mod Request] "
+labels: ["mod-request"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve the mod detection list! Please provide as much information as possible.
+
+  - type: input
+    id: mod-name
+    attributes:
+      label: Mod Name
+      description: The display name of the mod
+      placeholder: e.g., Xaero's Minimap
+    validations:
+      required: true
+
+  - type: input
+    id: mod-id
+    attributes:
+      label: Mod ID
+      description: A short identifier for the mod (lowercase, hyphens allowed)
+      placeholder: e.g., xaeros-minimap
+    validations:
+      required: true
+
+  - type: textarea
+    id: channels
+    attributes:
+      label: Plugin Message Channels
+      description: |
+        List the plugin message channels used by this mod (one per line).
+        You can find these by enabling `debug: true` in the config and checking console output.
+        Wildcards are supported (e.g., `modname:*`).
+      placeholder: |
+        modname:main
+        modname:sync
+    validations:
+      required: true
+
+  - type: input
+    id: mod-url
+    attributes:
+      label: Mod URL
+      description: Link to the mod page (CurseForge, Modrinth, GitHub, etc.)
+      placeholder: https://modrinth.com/mod/example
+    validations:
+      required: false
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Brief description of what this mod does and why it should be detectable
+      placeholder: This mod provides... and gives players an advantage by...
+    validations:
+      required: false
+
+  - type: dropdown
+    id: mod-loader
+    attributes:
+      label: Mod Loader
+      description: Which mod loader(s) does this mod support?
+      multiple: true
+      options:
+        - Fabric
+        - Forge
+        - NeoForge
+        - Quilt
+        - Other
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: verification
+    attributes:
+      label: Verification
+      description: Please confirm the following
+      options:
+        - label: I have tested and verified these channels are sent by the mod
+          required: true
+        - label: I have searched existing issues and mods.yml to ensure this mod is not already listed
+          required: true

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Feature Request
+    url: https://github.com/nim-f/moddetectorplugin/discussions/new?category=ideas
+    about: Suggest a new feature or improvement
+  - name: Questions & Help
+    url: https://github.com/nim-f/moddetectorplugin/discussions/new?category=q-a
+    about: Ask questions or get help with configuration
