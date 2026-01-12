@@ -2,6 +2,27 @@
 
 All notable changes to ModDetectorPlugin will be documented in this file.
 
+## [1.1.1] - 2026-01-12
+
+### Changed
+
+- **JSON Detection Logging**
+  - Detection logs now output in JSON format instead of plain text
+  - Log file changed from `detections.txt` to `detections.json`
+  - Each line is a valid JSON object for easy parsing
+
+- **Player Session Tracking**
+  - Logs now include player UUID
+  - Session join time (`sessionJoinTime`) recorded when player connects
+  - Session leave time (`sessionLeaveTime`) recorded on disconnect/kick
+  - Session duration in seconds (`sessionDurationSeconds`) calculated automatically
+
+### Example Log Entry
+
+```json
+{"timestamp":"2026-01-12T14:30:45Z","uuid":"f999e944-a15d-4287-bff4-34f63a97832e","username":"PlayerName","mods":["Jade","XaerosMinimap"],"sessionJoinTime":"2026-01-12T14:25:00Z","sessionLeaveTime":"2026-01-12T14:30:45Z","sessionDurationSeconds":345}
+```
+
 ## [1.1.0] - 2026-01-03
 
 ### Added
