@@ -9,10 +9,12 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerRegisterChannelEvent;
 import org.bukkit.plugin.messaging.PluginMessageListener;
 
+import java.time.Instant;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -26,12 +28,19 @@ public class ModMessageListener implements Listener, PluginMessageListener {
     private final MiniMessage miniMessage = MiniMessage.miniMessage();
 
     private final Map<UUID, Set<String>> detectedChannels = new ConcurrentHashMap<>();
+    private final Map<UUID, Instant> sessionStartTimes = new ConcurrentHashMap<>();
     private final Set<UUID> pendingKicks = ConcurrentHashMap.newKeySet();
 
     public ModMessageListener(ModDetectorPlugin plugin, ModFilterConfig config, DetectionLogger detectionLogger) {
         this.plugin = plugin;
         this.config = config;
         this.detectionLogger = detectionLogger;
+    }
+
+    @EventHandler
+    public void onPlayerJoin(PlayerJoinEvent event) {
+        Player player = event.getPlayer();
+        sessionStartTimes.put(player.getUniqueId(), Instant.now());
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
@@ -72,9 +81,12 @@ public class ModMessageListener implements Listener, PluginMessageListener {
         Player player = event.getPlayer();
         UUID uuid = player.getUniqueId();
 
+        Instant joinTime = sessionStartTimes.remove(uuid);
+        Instant leaveTime = Instant.now();
+
         Set<String> channels = detectedChannels.remove(uuid);
         if (channels != null && !channels.isEmpty() && config.getAction() == ModFilterConfig.Action.LOG) {
-            detectionLogger.logDetection(player, channels);
+            detectionLogger.logDetection(player, channels, joinTime, leaveTime);
         }
 
         pendingKicks.remove(uuid);
@@ -103,7 +115,8 @@ public class ModMessageListener implements Listener, PluginMessageListener {
             }
         } else if (action == ModFilterConfig.Action.LOG && isNewDetection) {
             // In LOG-only mode, write to file immediately for each new detection
-            detectionLogger.logDetection(player, Set.of(modName));
+            Instant joinTime = sessionStartTimes.get(uuid);
+            detectionLogger.logDetection(player, Set.of(modName), joinTime, Instant.now());
         }
     }
 
@@ -113,6 +126,7 @@ public class ModMessageListener implements Listener, PluginMessageListener {
 
         if (!player.isOnline()) {
             detectedChannels.remove(uuid);
+            sessionStartTimes.remove(uuid);
             return;
         }
 
@@ -121,7 +135,9 @@ public class ModMessageListener implements Listener, PluginMessageListener {
             return;
         }
 
-        detectionLogger.logDetection(player, channels);
+        Instant joinTime = sessionStartTimes.remove(uuid);
+        Instant kickTime = Instant.now();
+        detectionLogger.logDetection(player, channels, joinTime, kickTime);
 
         String modList = String.join(", ", channels);
         Component kickComponent = miniMessage.deserialize(
