@@ -2,6 +2,7 @@ package xyz.nim.modDetectorPlugin;
 
 import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.connection.DisconnectEvent;
+import com.velocitypowered.api.event.connection.PostLoginEvent;
 import com.velocitypowered.api.event.player.PlayerChannelRegisterEvent;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.messages.ChannelIdentifier;
@@ -10,6 +11,7 @@ import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 
+import java.time.Instant;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -24,12 +26,19 @@ public class ModMessageListener {
     private final MiniMessage miniMessage = MiniMessage.miniMessage();
 
     private final Map<UUID, Set<String>> detectedChannels = new ConcurrentHashMap<>();
+    private final Map<UUID, Instant> sessionStartTimes = new ConcurrentHashMap<>();
     private final Set<UUID> pendingKicks = ConcurrentHashMap.newKeySet();
 
     public ModMessageListener(ModDetectorPlugin plugin, ModFilterConfig config, DetectionLogger detectionLogger) {
         this.plugin = plugin;
         this.config = config;
         this.detectionLogger = detectionLogger;
+    }
+
+    @Subscribe
+    public void onPlayerLogin(PostLoginEvent event) {
+        Player player = event.getPlayer();
+        sessionStartTimes.put(player.getUniqueId(), Instant.now());
     }
 
     @Subscribe
@@ -58,9 +67,12 @@ public class ModMessageListener {
         Player player = event.getPlayer();
         UUID uuid = player.getUniqueId();
 
+        Instant joinTime = sessionStartTimes.remove(uuid);
+        Instant leaveTime = Instant.now();
+
         Set<String> channels = detectedChannels.remove(uuid);
         if (channels != null && !channels.isEmpty() && config.getAction() == ModFilterConfig.Action.LOG) {
-            detectionLogger.logDetection(player, channels);
+            detectionLogger.logDetection(player, channels, joinTime, leaveTime);
         }
 
         pendingKicks.remove(uuid);
@@ -93,7 +105,8 @@ public class ModMessageListener {
             }
         } else if (action == ModFilterConfig.Action.LOG && isNewDetection) {
             // In LOG-only mode, write to file immediately for each new detection
-            detectionLogger.logDetection(player, Set.of(modName));
+            Instant joinTime = sessionStartTimes.get(uuid);
+            detectionLogger.logDetection(player, Set.of(modName), joinTime, Instant.now());
         }
     }
 
@@ -103,6 +116,7 @@ public class ModMessageListener {
 
         if (!player.isActive()) {
             detectedChannels.remove(uuid);
+            sessionStartTimes.remove(uuid);
             return;
         }
 
@@ -111,7 +125,9 @@ public class ModMessageListener {
             return;
         }
 
-        detectionLogger.logDetection(player, channels);
+        Instant joinTime = sessionStartTimes.remove(uuid);
+        Instant kickTime = Instant.now();
+        detectionLogger.logDetection(player, channels, joinTime, kickTime);
 
         String modList = String.join(", ", channels);
         Component kickComponent = miniMessage.deserialize(

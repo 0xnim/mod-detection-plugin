@@ -3,13 +3,17 @@ plugins {
 }
 
 group = 'xyz.nim'
-version = '1.1.0-velocity'
+version = '1.1.1-velocity'
 
 repositories {
     mavenCentral()
     maven {
         name = "papermc-repo"
         url = "https://repo.papermc.io/repository/maven-public/"
+    }
+    maven {
+        name = "dmulloy2-repo"
+        url = "https://repo.dmulloy2.net/repository/public/"
     }
 }
 
