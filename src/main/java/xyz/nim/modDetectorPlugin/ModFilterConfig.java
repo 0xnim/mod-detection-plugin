@@ -1,11 +1,11 @@
 package xyz.nim.modDetectorPlugin;
 
-import org.bukkit.configuration.ConfigurationSection;
-import org.bukkit.configuration.file.FileConfiguration;
-import org.bukkit.configuration.file.YamlConfiguration;
+import org.yaml.snakeyaml.Yaml;
 
+import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -57,9 +57,10 @@ public class ModFilterConfig {
     private final Map<String, ModDefinition> knownMods = new HashMap<>();
     private final Map<String, ModDefinition> customMods = new HashMap<>();
     private final Map<Pattern, String> patternToModName = new HashMap<>();
-    private final Map<Pattern, String> allModPatterns = new HashMap<>(); // All known mods for name resolution
+    private final Map<Pattern, String> allModPatterns = new HashMap<>();
 
     private final ModDetectorPlugin plugin;
+    private final Yaml yaml = new Yaml();
 
     public ModFilterConfig(ModDetectorPlugin plugin) {
         this.plugin = plugin;
@@ -69,27 +70,26 @@ public class ModFilterConfig {
     public void load() {
         loadKnownMods();
 
-        plugin.saveDefaultConfig();
-        plugin.reloadConfig();
-        FileConfiguration config = plugin.getConfig();
+        saveDefaultConfig();
+        Map<String, Object> config = loadConfigFile();
 
-        String modeStr = config.getString("mode", "blacklist").toUpperCase();
+        String modeStr = getString(config, "mode", "blacklist").toUpperCase();
         this.mode = modeStr.equals("WHITELIST") ? Mode.WHITELIST : Mode.BLACKLIST;
 
-        String actionStr = config.getString("action", "both").toUpperCase();
+        String actionStr = getString(config, "action", "both").toUpperCase();
         this.action = switch (actionStr) {
             case "KICK" -> Action.KICK;
             case "LOG" -> Action.LOG;
             default -> Action.BOTH;
         };
 
-        this.kickMessageFormat = config.getString("kick-message",
+        this.kickMessageFormat = getString(config, "kick-message",
                 "<red>You have been kicked for using disallowed client mods:</red><newline><yellow><mods></yellow>");
-        this.logFormat = config.getString("log-format", "[ModDetector] Player %player% sent plugin message on channel: %channel%");
-        this.debug = config.getBoolean("debug", false);
-        this.notifyAdmins = config.getBoolean("notify-admins", true);
-        this.trackDetections = config.getBoolean("track-detections", true);
-        this.logAllChannels = config.getBoolean("log-all-channels", false);
+        this.logFormat = getString(config, "log-format", "[ModDetector] Player %player% sent plugin message on channel: %channel%");
+        this.debug = getBoolean(config, "debug", false);
+        this.notifyAdmins = getBoolean(config, "notify-admins", true);
+        this.trackDetections = getBoolean(config, "track-detections", true);
+        this.logAllChannels = getBoolean(config, "log-all-channels", false);
 
         loadCustomMods(config);
 
@@ -111,10 +111,9 @@ public class ModFilterConfig {
             }
         }
 
-        List<String> blockedModIds = config.getStringList("blocked-mods");
+        List<String> blockedModIds = getStringList(config, "blocked-mods");
         for (String modId : blockedModIds) {
             String modIdLower = modId.toLowerCase();
-            // Check both known mods and custom mods
             ModDefinition mod = knownMods.get(modIdLower);
             if (mod == null) {
                 mod = customMods.get(modIdLower);
@@ -128,11 +127,11 @@ public class ModFilterConfig {
                 }
                 plugin.getLogger().info("Loaded mod: " + mod.getName() + " (" + mod.getChannels().size() + " channels)");
             } else {
-                plugin.getLogger().warning("Unknown mod ID in config: " + modId);
+                plugin.getLogger().warn("Unknown mod ID in config: " + modId);
             }
         }
 
-        List<String> customPatterns = config.getStringList("custom-patterns");
+        List<String> customPatterns = getStringList(config, "custom-patterns");
         for (String patternStr : customPatterns) {
             Pattern pattern = wildcardToRegex(patternStr);
             patterns.add(pattern);
@@ -142,24 +141,55 @@ public class ModFilterConfig {
         plugin.getLogger().info("Loaded " + patterns.size() + " channel patterns in " + mode + " mode");
     }
 
-    private void loadCustomMods(FileConfiguration config) {
+    private void saveDefaultConfig() {
+        Path configPath = plugin.getDataDirectory().resolve("config.yml");
+        if (!Files.exists(configPath)) {
+            try {
+                Files.createDirectories(plugin.getDataDirectory());
+                try (InputStream stream = getClass().getClassLoader().getResourceAsStream("config.yml")) {
+                    if (stream != null) {
+                        Files.copy(stream, configPath);
+                    }
+                }
+            } catch (IOException e) {
+                plugin.getLogger().warn("Failed to save default config: " + e.getMessage());
+            }
+        }
+    }
+
+    private Map<String, Object> loadConfigFile() {
+        Path configPath = plugin.getDataDirectory().resolve("config.yml");
+        try (InputStream stream = Files.newInputStream(configPath)) {
+            Map<String, Object> config = yaml.load(stream);
+            return config != null ? config : new HashMap<>();
+        } catch (IOException e) {
+            plugin.getLogger().warn("Failed to load config.yml: " + e.getMessage());
+            return new HashMap<>();
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private void loadCustomMods(Map<String, Object> config) {
         customMods.clear();
 
-        ConfigurationSection customModsSection = config.getConfigurationSection("custom-mods");
-        if (customModsSection == null) {
+        Object customModsObj = config.get("custom-mods");
+        if (!(customModsObj instanceof Map)) {
             return;
         }
 
-        for (String modId : customModsSection.getKeys(false)) {
-            ConfigurationSection modSection = customModsSection.getConfigurationSection(modId);
-            if (modSection == null) continue;
+        Map<String, Object> customModsSection = (Map<String, Object>) customModsObj;
 
-            String name = modSection.getString("name", modId);
-            String description = modSection.getString("description", "Custom mod");
-            List<String> channels = modSection.getStringList("channels");
+        for (String modId : customModsSection.keySet()) {
+            Object modObj = customModsSection.get(modId);
+            if (!(modObj instanceof Map)) continue;
+
+            Map<String, Object> modSection = (Map<String, Object>) modObj;
+            String name = getString(modSection, "name", modId);
+            String description = getString(modSection, "description", "Custom mod");
+            List<String> channels = getStringList(modSection, "channels");
 
             if (channels.isEmpty()) {
-                plugin.getLogger().warning("Custom mod '" + modId + "' has no channels defined, skipping");
+                plugin.getLogger().warn("Custom mod '" + modId + "' has no channels defined, skipping");
                 continue;
             }
 
@@ -171,30 +201,34 @@ public class ModFilterConfig {
         }
     }
 
+    @SuppressWarnings("unchecked")
     private void loadKnownMods() {
         knownMods.clear();
 
-        try (InputStream stream = plugin.getResource("mods.yml")) {
+        try (InputStream stream = getClass().getClassLoader().getResourceAsStream("mods.yml")) {
             if (stream == null) {
-                plugin.getLogger().warning("Could not find mods.yml resource");
+                plugin.getLogger().warn("Could not find mods.yml resource");
                 return;
             }
 
-            YamlConfiguration modsConfig = YamlConfiguration.loadConfiguration(new InputStreamReader(stream));
-            ConfigurationSection modsSection = modsConfig.getConfigurationSection("mods");
+            Map<String, Object> modsConfig = yaml.load(stream);
+            Object modsObj = modsConfig.get("mods");
 
-            if (modsSection == null) {
-                plugin.getLogger().warning("No 'mods' section found in mods.yml");
+            if (!(modsObj instanceof Map)) {
+                plugin.getLogger().warn("No 'mods' section found in mods.yml");
                 return;
             }
 
-            for (String modId : modsSection.getKeys(false)) {
-                ConfigurationSection modSection = modsSection.getConfigurationSection(modId);
-                if (modSection == null) continue;
+            Map<String, Object> modsSection = (Map<String, Object>) modsObj;
 
-                String name = modSection.getString("name", modId);
-                String description = modSection.getString("description", "");
-                List<String> channels = modSection.getStringList("channels");
+            for (String modId : modsSection.keySet()) {
+                Object modObj = modsSection.get(modId);
+                if (!(modObj instanceof Map)) continue;
+
+                Map<String, Object> modSection = (Map<String, Object>) modObj;
+                String name = getString(modSection, "name", modId);
+                String description = getString(modSection, "description", "");
+                List<String> channels = getStringList(modSection, "channels");
 
                 knownMods.put(modId.toLowerCase(), new ModDefinition(modId, name, description, channels));
             }
@@ -202,7 +236,7 @@ public class ModFilterConfig {
             plugin.getLogger().info("Loaded " + knownMods.size() + " known mod definitions");
 
         } catch (Exception e) {
-            plugin.getLogger().severe("Failed to load mods.yml: " + e.getMessage());
+            plugin.getLogger().error("Failed to load mods.yml: " + e.getMessage());
         }
     }
 
@@ -229,6 +263,33 @@ public class ModFilterConfig {
         }
         regex.append("$");
         return Pattern.compile(regex.toString(), Pattern.CASE_INSENSITIVE);
+    }
+
+    // Helper methods for YAML parsing
+    private String getString(Map<String, Object> map, String key, String defaultValue) {
+        Object value = map.get(key);
+        return value != null ? value.toString() : defaultValue;
+    }
+
+    private boolean getBoolean(Map<String, Object> map, String key, boolean defaultValue) {
+        Object value = map.get(key);
+        if (value instanceof Boolean) {
+            return (Boolean) value;
+        }
+        return defaultValue;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<String> getStringList(Map<String, Object> map, String key) {
+        Object value = map.get(key);
+        if (value instanceof List) {
+            List<String> result = new ArrayList<>();
+            for (Object item : (List<?>) value) {
+                result.add(item.toString());
+            }
+            return result;
+        }
+        return new ArrayList<>();
     }
 
     public boolean matchesPattern(String channel) {
