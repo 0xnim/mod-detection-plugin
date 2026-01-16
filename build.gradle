@@ -4,7 +4,7 @@ plugins {
 }
 
 group = 'xyz.nim'
-version = '1.2.0'
+version = '1.2.1'
 
 repositories {
     mavenCentral()
@@ -20,6 +20,7 @@ repositories {
 
 dependencies {
     compileOnly("io.papermc.paper:paper-api:1.21.8-R0.1-SNAPSHOT")
+    implementation("com.google.code.gson:gson:2.11.0")
 }
 
 tasks {

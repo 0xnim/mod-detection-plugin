@@ -7,6 +7,8 @@ import io.papermc.paper.command.brigadier.argument.ArgumentTypes;
 import io.papermc.paper.plugin.lifecycle.event.LifecycleEventManager;
 import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.ClickEvent;
+import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
@@ -61,8 +63,8 @@ public final class ModDetectorPlugin extends JavaPlugin {
                                         sender.sendMessage(Component.text("=== ModDetector Status ===", NamedTextColor.GOLD));
                                         sender.sendMessage(Component.text("Mode: ", NamedTextColor.GRAY)
                                                 .append(Component.text(modFilterConfig.getMode().name(), NamedTextColor.YELLOW)));
-                                        sender.sendMessage(Component.text("Action: ", NamedTextColor.GRAY)
-                                                .append(Component.text(modFilterConfig.getAction().name(), NamedTextColor.YELLOW)));
+                                        sender.sendMessage(Component.text("Kick: ", NamedTextColor.GRAY)
+                                                .append(Component.text(modFilterConfig.isKick() ? "enabled" : "disabled", NamedTextColor.YELLOW)));
                                         sender.sendMessage(Component.text("Debug: ", NamedTextColor.GRAY)
                                                 .append(Component.text(modFilterConfig.isDebug() ? "enabled" : "disabled", NamedTextColor.YELLOW)));
                                         sender.sendMessage(Component.text("Log All Channels: ", NamedTextColor.GRAY)
@@ -123,11 +125,13 @@ public final class ModDetectorPlugin extends JavaPlugin {
                                         dataToShow.forEach((uuid, channels) -> {
                                             var player = getServer().getPlayer(uuid);
                                             if (player != null && player.isOnline()) {
-                                                sender.sendMessage(Component.text("  " + player.getName(), NamedTextColor.YELLOW)
+                                                String playerName = player.getName();
+                                                sender.sendMessage(Component.text("  " + playerName, NamedTextColor.YELLOW)
+                                                        .clickEvent(ClickEvent.runCommand("/md info " + playerName))
+                                                        .hoverEvent(HoverEvent.showText(Component.text("Click to view channels", NamedTextColor.GRAY)))
                                                         .append(Component.text(" (" + channels.size() + " channels)", NamedTextColor.GRAY)));
                                             }
                                         });
-                                        sender.sendMessage(Component.text("Use /md info <player> for details", NamedTextColor.GRAY));
                                         return Command.SINGLE_SUCCESS;
                                     }))
                             .then(Commands.literal("info")
@@ -249,6 +253,7 @@ public final class ModDetectorPlugin extends JavaPlugin {
     @Override
     public void onDisable() {
         getServer().getMessenger().unregisterIncomingPluginChannel(this);
+        detectionLogger.shutdown();
         getLogger().info("ModDetector disabled");
     }
 

@@ -4,6 +4,7 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -36,6 +37,30 @@ public class ModMessageListener implements Listener, PluginMessageListener {
         this.plugin = plugin;
         this.config = config;
         this.detectionLogger = detectionLogger;
+        startCleanupTask();
+    }
+
+    private void startCleanupTask() {
+        // Clean up stale entries every 5 minutes (6000 ticks)
+        Bukkit.getScheduler().runTaskTimer(plugin, this::cleanupStaleEntries, 6000L, 6000L);
+    }
+
+    private void cleanupStaleEntries() {
+        // Clean up entries for players who are no longer online
+        Set<UUID> onlineUuids = ConcurrentHashMap.newKeySet();
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            onlineUuids.add(player.getUniqueId());
+        }
+
+        // Remove tracking data for offline players
+        sessionStartTimes.keySet().removeIf(uuid -> !onlineUuids.contains(uuid));
+        detectedChannels.keySet().removeIf(uuid -> !onlineUuids.contains(uuid));
+        allRegisteredChannels.keySet().removeIf(uuid -> !onlineUuids.contains(uuid));
+        pendingKicks.removeIf(uuid -> !onlineUuids.contains(uuid));
+
+        if (config.isDebug()) {
+            plugin.getLogger().info("[DEBUG] Cleaned up stale tracking entries");
+        }
     }
 
     @EventHandler
@@ -95,40 +120,39 @@ public class ModMessageListener implements Listener, PluginMessageListener {
         Instant joinTime = sessionStartTimes.remove(uuid);
         Instant leaveTime = Instant.now();
 
+        // Always log detections on disconnect (if there were any and not kicking)
         Set<String> channels = detectedChannels.remove(uuid);
-        if (channels != null && !channels.isEmpty() && config.getAction() == ModFilterConfig.Action.LOG) {
+        if (channels != null && !channels.isEmpty() && !config.isKick()) {
             detectionLogger.logDetection(player, channels, joinTime, leaveTime);
         }
 
         // Clean up all registered channels tracking
         allRegisteredChannels.remove(uuid);
-
         pendingKicks.remove(uuid);
     }
 
     private void handleBlockedChannel(Player player, String channel) {
         UUID uuid = player.getUniqueId();
-        ModFilterConfig.Action action = config.getAction();
 
         String modName = config.getModName(channel);
         Set<String> playerMods = detectedChannels.computeIfAbsent(uuid, k -> ConcurrentHashMap.newKeySet());
         boolean isNewDetection = playerMods.add(modName);
 
-        if (action == ModFilterConfig.Action.LOG || action == ModFilterConfig.Action.BOTH) {
-            String logMessage = config.formatLogMessage(player.getName(), channel);
-            plugin.getLogger().warning(logMessage);
-        }
+        // Always log to console
+        String logMessage = config.formatLogMessage(player.getName(), channel);
+        plugin.getLogger().warning(logMessage);
 
         if (config.isNotifyAdmins()) {
             notifyAdmins(player, modName, channel);
         }
 
-        if (action == ModFilterConfig.Action.KICK || action == ModFilterConfig.Action.BOTH) {
+        if (config.isKick()) {
+            // Schedule kick with batching
             if (pendingKicks.add(uuid)) {
                 Bukkit.getScheduler().runTaskLater(plugin, () -> executeKick(player), 20L);
             }
-        } else if (action == ModFilterConfig.Action.LOG && isNewDetection) {
-            // In LOG-only mode, write to file immediately for each new detection
+        } else if (isNewDetection) {
+            // Not kicking - log detection immediately for each new mod
             Instant joinTime = sessionStartTimes.get(uuid);
             detectionLogger.logDetection(player, Set.of(modName), joinTime, Instant.now());
         }
@@ -141,6 +165,7 @@ public class ModMessageListener implements Listener, PluginMessageListener {
         if (!player.isOnline()) {
             detectedChannels.remove(uuid);
             sessionStartTimes.remove(uuid);
+            allRegisteredChannels.remove(uuid);
             return;
         }
 
@@ -183,6 +208,8 @@ public class ModMessageListener implements Listener, PluginMessageListener {
             }
         }
 
-        Bukkit.getConsoleSender().sendMessage(message);
+        // Log plain text to console
+        String plainText = PlainTextComponentSerializer.plainText().serialize(message);
+        plugin.getLogger().info(plainText);
     }
 }

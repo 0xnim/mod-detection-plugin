@@ -19,12 +19,6 @@ public class ModFilterConfig {
         BLACKLIST
     }
 
-    public enum Action {
-        KICK,
-        LOG,
-        BOTH
-    }
-
     public static class ModDefinition {
         private final String id;
         private final String name;
@@ -45,7 +39,7 @@ public class ModFilterConfig {
     }
 
     private Mode mode;
-    private Action action;
+    private boolean kick;
     private String kickMessageFormat;
     private String logFormat;
     private List<Pattern> patterns;
@@ -76,12 +70,7 @@ public class ModFilterConfig {
         String modeStr = config.getString("mode", "blacklist").toUpperCase();
         this.mode = modeStr.equals("WHITELIST") ? Mode.WHITELIST : Mode.BLACKLIST;
 
-        String actionStr = config.getString("action", "both").toUpperCase();
-        this.action = switch (actionStr) {
-            case "KICK" -> Action.KICK;
-            case "LOG" -> Action.LOG;
-            default -> Action.BOTH;
-        };
+        this.kick = config.getBoolean("kick", true);
 
         this.kickMessageFormat = config.getString("kick-message",
                 "<red>You have been kicked for using disallowed client mods:</red><newline><yellow><mods></yellow>");
@@ -270,8 +259,8 @@ public class ModFilterConfig {
         return mode;
     }
 
-    public Action getAction() {
-        return action;
+    public boolean isKick() {
+        return kick;
     }
 
     public String getKickMessageFormat() {

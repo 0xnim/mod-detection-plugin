@@ -5,13 +5,13 @@
 # - blacklist: Block listed mods/patterns, allow everything else
 mode: blacklist
 
-# Action to take when a blocked channel is detected
-# Options: "kick", "log", "both"
+# Whether to kick players when a blocked channel is detected
+# Detections are always logged regardless of this setting
 #
-# SILENT LISTENER MODE: Set action to "log" and notify-admins to false
+# SILENT LISTENER MODE: Set kick to false and notify-admins to false
 # Players will be tracked without being kicked or notified.
 # Use /moddetector players to see online players with detected mods.
-action: both
+kick: true
 
 # Kick message shown to players when kicked for using blocked mods
 # Uses MiniMessage format: https://docs.advntr.dev/minimessage/format.html
