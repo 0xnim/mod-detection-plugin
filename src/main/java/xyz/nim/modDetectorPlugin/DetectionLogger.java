@@ -143,14 +143,16 @@ public class DetectionLogger {
         PlayerChannelData data = playerDataCache.computeIfAbsent(uuid,
                 k -> new PlayerChannelData(uuid, username));
         data.username = username;
-        data.channels.add(channel);
         data.lastSeen = TIMESTAMP_FORMAT.format(Instant.now());
 
-        // Resolve channel to mod name and add to mods set
+        // Resolve channel to mod name
         String modName = plugin.getModFilterConfig().getModName(channel);
         if (!modName.equals(channel)) {
-            // Only add if it resolved to a known mod name
+            // Known mod - add to mods set
             data.mods.add(modName);
+        } else {
+            // Unknown channel - add to channels set
+            data.channels.add(channel);
         }
 
         boolean isNewChannel = discoveredChannels.add(channel);
