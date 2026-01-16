@@ -2,6 +2,72 @@
 
 All notable changes to ModDetectorPlugin will be documented in this file.
 
+## [1.2.0] - 2026-01-16
+
+### Added
+
+- **Log All Channels Mode**
+  - New `log-all-channels` config option to log ALL channel registrations to file
+  - Tracks every mod channel a player registers, not just blocked ones
+  - No console logging for better performance
+
+- **`/md info <player>` Command**
+  - View all registered channels for a specific player
+  - Shows current session channels and historical data
+  - Color-coded output: red = blocked, green = allowed
+  - Displays resolved mod names alongside raw channel strings
+
+- **`/md discovered` Command**
+  - Lists all unique channels ever discovered on the server
+  - Useful for documentation and discovering new mods
+  - Persists across server restarts
+
+- **Discovered Channels File**
+  - New `discovered-channels.json` file tracks all unique channels ever seen
+  - JSON array format for easy parsing
+  - Automatically updated when new channels are registered
+
+- **Smart Mod Name Resolution**
+  - Channel-to-mod resolution now works for ALL mods in `mods.yml`, not just blocked ones
+  - Detection logs show pretty mod names (e.g., "Simple Voice Chat" instead of "voicechat:state")
+  - Unknown channels remain as raw strings for identification
+
+### Changed
+
+- **Consolidated Player Entries**
+  - `detections.json` now uses one entry per player (updated in place)
+  - Multiple channels from the same mod are grouped together
+  - Format changed from `"channels"` to `"mods"` array with resolved names
+
+- **`/md players` Command**
+  - Now shows all registered channels when `log-all-channels` is enabled
+  - Displays channel count per player
+  - Added hint to use `/md info <player>` for details
+
+- **`/md status` Command**
+  - Now shows `Log All Channels` setting status
+
+- **Help Command**
+  - Updated to show all new commands
+  - Commands now displayed with `/md` shorthand
+
+### Example Detection Entry
+
+```json
+{"uuid":"f999e944-a15d-4287-bff4-34f63a97832e","username":"PlayerName","mods":["AppleSkin","Simple Voice Chat","Noxesium","Flashback","civ:class_xp"],"lastSeen":"2026-01-16T12:00:00Z"}
+```
+
+### Example Discovered Channels
+
+```json
+[
+  "xaerominimap:main",
+  "voicechat:state",
+  "noxesium-v2:server_info",
+  "fabric:registry/sync"
+]
+```
+
 ## [1.1.1] - 2026-01-12
 
 ### Changed

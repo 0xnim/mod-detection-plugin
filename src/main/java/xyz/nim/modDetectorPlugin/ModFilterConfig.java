@@ -52,10 +52,12 @@ public class ModFilterConfig {
     private boolean debug;
     private boolean notifyAdmins;
     private boolean trackDetections;
+    private boolean logAllChannels;
 
     private final Map<String, ModDefinition> knownMods = new HashMap<>();
     private final Map<String, ModDefinition> customMods = new HashMap<>();
     private final Map<Pattern, String> patternToModName = new HashMap<>();
+    private final Map<Pattern, String> allModPatterns = new HashMap<>(); // All known mods for name resolution
 
     private final ModDetectorPlugin plugin;
 
@@ -87,11 +89,27 @@ public class ModFilterConfig {
         this.debug = config.getBoolean("debug", false);
         this.notifyAdmins = config.getBoolean("notify-admins", true);
         this.trackDetections = config.getBoolean("track-detections", true);
+        this.logAllChannels = config.getBoolean("log-all-channels", false);
 
         loadCustomMods(config);
 
         this.patterns.clear();
         this.patternToModName.clear();
+        this.allModPatterns.clear();
+
+        // Build patterns for ALL known mods (for name resolution)
+        for (ModDefinition mod : knownMods.values()) {
+            for (String channel : mod.getChannels()) {
+                Pattern pattern = wildcardToRegex(channel);
+                allModPatterns.put(pattern, mod.getName());
+            }
+        }
+        for (ModDefinition mod : customMods.values()) {
+            for (String channel : mod.getChannels()) {
+                Pattern pattern = wildcardToRegex(channel);
+                allModPatterns.put(pattern, mod.getName());
+            }
+        }
 
         List<String> blockedModIds = config.getStringList("blocked-mods");
         for (String modId : blockedModIds) {
@@ -223,7 +241,8 @@ public class ModFilterConfig {
     }
 
     public String getModName(String channel) {
-        for (Map.Entry<Pattern, String> entry : patternToModName.entrySet()) {
+        // Check all known mods (not just blocked ones) for name resolution
+        for (Map.Entry<Pattern, String> entry : allModPatterns.entrySet()) {
             if (entry.getKey().matcher(channel).matches()) {
                 return entry.getValue();
             }
@@ -273,6 +292,10 @@ public class ModFilterConfig {
 
     public boolean isTrackDetections() {
         return trackDetections;
+    }
+
+    public boolean isLogAllChannels() {
+        return logAllChannels;
     }
 
     public String formatLogMessage(String playerName, String channel) {

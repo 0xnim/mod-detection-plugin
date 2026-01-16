@@ -69,8 +69,14 @@ custom-patterns: []
 # OTHER SETTINGS
 # ============================================
 
-# Whether to log all incoming plugin messages (useful for discovering mod channels)
+# Whether to log all incoming plugin messages to console (useful for discovering mod channels)
 debug: false
+
+# Log ALL channel registrations to file (not just blocked mods)
+# Creates player entries in detections.json and tracks all discovered channels
+# in discovered-channels.json for documentation purposes
+# Use /md info <player> to view a player's registered channels
+log-all-channels: false
 
 # Notify players with permission "moddetector.notify" when a mod is detected
 notify-admins: true

@@ -28,6 +28,7 @@ public class ModMessageListener implements Listener, PluginMessageListener {
     private final MiniMessage miniMessage = MiniMessage.miniMessage();
 
     private final Map<UUID, Set<String>> detectedChannels = new ConcurrentHashMap<>();
+    private final Map<UUID, Set<String>> allRegisteredChannels = new ConcurrentHashMap<>();
     private final Map<UUID, Instant> sessionStartTimes = new ConcurrentHashMap<>();
     private final Set<UUID> pendingKicks = ConcurrentHashMap.newKeySet();
 
@@ -50,6 +51,16 @@ public class ModMessageListener implements Listener, PluginMessageListener {
 
         if (config.isDebug()) {
             plugin.getLogger().info("[DEBUG] Player " + player.getName() + " registered channel: " + channel);
+        }
+
+        // Always track all channels in memory for /md info command
+        UUID uuid = player.getUniqueId();
+        Set<String> channels = allRegisteredChannels.computeIfAbsent(uuid, k -> ConcurrentHashMap.newKeySet());
+        if (channels.add(channel)) {
+            // New channel registered - log to file if log-all-channels is enabled
+            if (config.isLogAllChannels()) {
+                detectionLogger.logChannelRegistration(player, channel, sessionStartTimes.get(uuid));
+            }
         }
 
         if (player.hasPermission("moddetector.bypass")) {
@@ -88,6 +99,9 @@ public class ModMessageListener implements Listener, PluginMessageListener {
         if (channels != null && !channels.isEmpty() && config.getAction() == ModFilterConfig.Action.LOG) {
             detectionLogger.logDetection(player, channels, joinTime, leaveTime);
         }
+
+        // Clean up all registered channels tracking
+        allRegisteredChannels.remove(uuid);
 
         pendingKicks.remove(uuid);
     }
@@ -150,6 +164,10 @@ public class ModMessageListener implements Listener, PluginMessageListener {
 
     public Map<UUID, Set<String>> getDetectedChannels() {
         return detectedChannels;
+    }
+
+    public Map<UUID, Set<String>> getAllRegisteredChannels() {
+        return allRegisteredChannels;
     }
 
     private void notifyAdmins(Player offender, String modName, String channel) {

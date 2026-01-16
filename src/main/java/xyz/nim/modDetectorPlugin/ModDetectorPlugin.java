@@ -1,13 +1,20 @@
 package xyz.nim.modDetectorPlugin;
 
 import com.mojang.brigadier.Command;
+import com.mojang.brigadier.arguments.StringArgumentType;
 import io.papermc.paper.command.brigadier.Commands;
+import io.papermc.paper.command.brigadier.argument.ArgumentTypes;
 import io.papermc.paper.plugin.lifecycle.event.LifecycleEventManager;
 import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import org.bukkit.Bukkit;
+import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
+
+import java.util.Set;
+import java.util.UUID;
 
 @SuppressWarnings("UnstableApiUsage")
 public final class ModDetectorPlugin extends JavaPlugin {
@@ -58,6 +65,8 @@ public final class ModDetectorPlugin extends JavaPlugin {
                                                 .append(Component.text(modFilterConfig.getAction().name(), NamedTextColor.YELLOW)));
                                         sender.sendMessage(Component.text("Debug: ", NamedTextColor.GRAY)
                                                 .append(Component.text(modFilterConfig.isDebug() ? "enabled" : "disabled", NamedTextColor.YELLOW)));
+                                        sender.sendMessage(Component.text("Log All Channels: ", NamedTextColor.GRAY)
+                                                .append(Component.text(modFilterConfig.isLogAllChannels() ? "enabled" : "disabled", NamedTextColor.YELLOW)));
                                         sender.sendMessage(Component.text("Notify Admins: ", NamedTextColor.GRAY)
                                                 .append(Component.text(modFilterConfig.isNotifyAdmins() ? "enabled" : "disabled", NamedTextColor.YELLOW)));
                                         sender.sendMessage(Component.text("Track Detections: ", NamedTextColor.GRAY)
@@ -96,33 +105,110 @@ public final class ModDetectorPlugin extends JavaPlugin {
                                     .executes(ctx -> {
                                         var sender = ctx.getSource().getSender();
                                         var detected = messageListener.getDetectedChannels();
-                                        if (detected.isEmpty()) {
-                                            sender.sendMessage(Component.text("[ModDetector] No players with detected mods currently online.", NamedTextColor.YELLOW));
+                                        var allChannels = messageListener.getAllRegisteredChannels();
+
+                                        // Show all channels if log-all-channels is enabled, otherwise show detected
+                                        var dataToShow = modFilterConfig.isLogAllChannels() ? allChannels : detected;
+
+                                        if (dataToShow.isEmpty()) {
+                                            sender.sendMessage(Component.text("[ModDetector] No players with registered channels currently online.", NamedTextColor.YELLOW));
                                             return Command.SINGLE_SUCCESS;
                                         }
-                                        sender.sendMessage(Component.text("=== Players with Detected Mods ===", NamedTextColor.GOLD));
-                                        detected.forEach((uuid, mods) -> {
+
+                                        String title = modFilterConfig.isLogAllChannels()
+                                                ? "=== Players with Registered Channels ==="
+                                                : "=== Players with Detected Mods ===";
+                                        sender.sendMessage(Component.text(title, NamedTextColor.GOLD));
+
+                                        dataToShow.forEach((uuid, channels) -> {
                                             var player = getServer().getPlayer(uuid);
                                             if (player != null && player.isOnline()) {
                                                 sender.sendMessage(Component.text("  " + player.getName(), NamedTextColor.YELLOW)
-                                                        .append(Component.text(": ", NamedTextColor.GRAY))
-                                                        .append(Component.text(String.join(", ", mods), NamedTextColor.RED)));
+                                                        .append(Component.text(" (" + channels.size() + " channels)", NamedTextColor.GRAY)));
                                             }
                                         });
+                                        sender.sendMessage(Component.text("Use /md info <player> for details", NamedTextColor.GRAY));
+                                        return Command.SINGLE_SUCCESS;
+                                    }))
+                            .then(Commands.literal("info")
+                                    .then(Commands.argument("player", ArgumentTypes.player())
+                                            .executes(ctx -> {
+                                                var sender = ctx.getSource().getSender();
+                                                var playerSelector = ctx.getArgument("player", io.papermc.paper.command.brigadier.argument.resolvers.selector.PlayerSelectorArgumentResolver.class);
+                                                Player target;
+                                                try {
+                                                    target = playerSelector.resolve(ctx.getSource()).getFirst();
+                                                } catch (Exception e) {
+                                                    sender.sendMessage(Component.text("[ModDetector] Player not found or not online.", NamedTextColor.RED));
+                                                    return Command.SINGLE_SUCCESS;
+                                                }
+
+                                                UUID uuid = target.getUniqueId();
+                                                sender.sendMessage(Component.text("=== Channel Info: " + target.getName() + " ===", NamedTextColor.GOLD));
+
+                                                // Show current session channels
+                                                Set<String> currentChannels = messageListener.getAllRegisteredChannels().get(uuid);
+                                                if (currentChannels != null && !currentChannels.isEmpty()) {
+                                                    sender.sendMessage(Component.text("Current Session (" + currentChannels.size() + " channels):", NamedTextColor.YELLOW));
+                                                    for (String channel : currentChannels) {
+                                                        String modName = modFilterConfig.getModName(channel);
+                                                        boolean isBlocked = modFilterConfig.shouldBlock(channel);
+                                                        NamedTextColor color = isBlocked ? NamedTextColor.RED : NamedTextColor.GREEN;
+                                                        sender.sendMessage(Component.text("  " + channel, color)
+                                                                .append(Component.text(" -> " + modName, NamedTextColor.GRAY)));
+                                                    }
+                                                } else {
+                                                    sender.sendMessage(Component.text("No channels registered this session.", NamedTextColor.GRAY));
+                                                }
+
+                                                // Show historical data if available
+                                                var historicalData = detectionLogger.getPlayerData(uuid);
+                                                if (historicalData != null && !historicalData.channels.isEmpty()) {
+                                                    sender.sendMessage(Component.text("Historical (" + historicalData.channels.size() + " channels):", NamedTextColor.YELLOW));
+                                                    sender.sendMessage(Component.text("  Last seen: " + historicalData.lastSeen, NamedTextColor.GRAY));
+                                                    for (String channel : historicalData.channels) {
+                                                        String modName = modFilterConfig.getModName(channel);
+                                                        sender.sendMessage(Component.text("  " + channel, NamedTextColor.AQUA)
+                                                                .append(Component.text(" -> " + modName, NamedTextColor.GRAY)));
+                                                    }
+                                                }
+
+                                                return Command.SINGLE_SUCCESS;
+                                            })))
+                            .then(Commands.literal("discovered")
+                                    .executes(ctx -> {
+                                        var sender = ctx.getSource().getSender();
+                                        var discovered = detectionLogger.getDiscoveredChannels();
+                                        if (discovered.isEmpty()) {
+                                            sender.sendMessage(Component.text("[ModDetector] No channels discovered yet.", NamedTextColor.YELLOW));
+                                            return Command.SINGLE_SUCCESS;
+                                        }
+                                        sender.sendMessage(Component.text("=== All Discovered Channels (" + discovered.size() + ") ===", NamedTextColor.GOLD));
+                                        for (String channel : discovered) {
+                                            String modName = modFilterConfig.getModName(channel);
+                                            boolean isBlocked = modFilterConfig.shouldBlock(channel);
+                                            NamedTextColor color = isBlocked ? NamedTextColor.RED : NamedTextColor.GREEN;
+                                            sender.sendMessage(Component.text("  " + channel, color)
+                                                    .append(Component.text(" -> " + modName, NamedTextColor.GRAY)));
+                                        }
                                         return Command.SINGLE_SUCCESS;
                                     }))
                             .executes(ctx -> {
                                 var sender = ctx.getSource().getSender();
                                 sender.sendMessage(Component.text("=== ModDetector Commands ===", NamedTextColor.GOLD));
-                                sender.sendMessage(Component.text("/moddetector reload", NamedTextColor.YELLOW)
+                                sender.sendMessage(Component.text("/md reload", NamedTextColor.YELLOW)
                                         .append(Component.text(" - Reload configuration", NamedTextColor.GRAY)));
-                                sender.sendMessage(Component.text("/moddetector status", NamedTextColor.YELLOW)
+                                sender.sendMessage(Component.text("/md status", NamedTextColor.YELLOW)
                                         .append(Component.text(" - Show current status", NamedTextColor.GRAY)));
-                                sender.sendMessage(Component.text("/moddetector mods", NamedTextColor.YELLOW)
+                                sender.sendMessage(Component.text("/md mods", NamedTextColor.YELLOW)
                                         .append(Component.text(" - List known mod IDs", NamedTextColor.GRAY)));
-                                sender.sendMessage(Component.text("/moddetector players", NamedTextColor.YELLOW)
-                                        .append(Component.text(" - Show tracked players with mods", NamedTextColor.GRAY)));
-                                sender.sendMessage(Component.text("/moddetector debug", NamedTextColor.YELLOW)
+                                sender.sendMessage(Component.text("/md players", NamedTextColor.YELLOW)
+                                        .append(Component.text(" - Show players with registered channels", NamedTextColor.GRAY)));
+                                sender.sendMessage(Component.text("/md info <player>", NamedTextColor.YELLOW)
+                                        .append(Component.text(" - Show all channels for a player", NamedTextColor.GRAY)));
+                                sender.sendMessage(Component.text("/md discovered", NamedTextColor.YELLOW)
+                                        .append(Component.text(" - List all discovered channels", NamedTextColor.GRAY)));
+                                sender.sendMessage(Component.text("/md debug", NamedTextColor.YELLOW)
                                         .append(Component.text(" - Show debug status", NamedTextColor.GRAY)));
                                 return Command.SINGLE_SUCCESS;
                             })
