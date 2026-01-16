@@ -2,6 +2,67 @@
 
 All notable changes to ModDetectorPlugin will be documented in this file.
 
+## [1.2.1] - 2026-01-16
+
+### Added
+
+- **Session Tracking**
+  - Tracks `totalTimePlayedSeconds` across all sessions
+  - Records `sessionCount` for each player
+  - Maintains `sessions` array with join/leave times and duration for each session
+
+- **Clickable Player Names**
+  - Player names in `/md players` are now clickable
+  - Click to run `/md info <player>` automatically
+  - Hover text shows "Click to view channels"
+
+### Changed
+
+- **Simplified Action Config**
+  - Replaced `action: kick/log/both` with simple `kick: true/false`
+  - Detections are now ALWAYS logged regardless of kick setting
+  - Cleaner config, same functionality
+
+- **Smarter Detection Logging**
+  - Only creates new JSON entry when player's modlist changes
+  - Returning players with same mods just add session info to existing entry
+  - Reduces file size and improves readability
+
+- **Separated Mods and Channels**
+  - `mods` field now contains resolved mod names (e.g., "Simple Voice Chat")
+  - `channels` field now only contains unrecognized/unknown channels
+  - `/md info` command updated to show both sections separately
+
+- **Internal Improvements**
+  - Replaced manual JSON parsing with Gson library
+  - Atomic file writes (write to .tmp, then move) prevents corruption
+  - Batched I/O with 30-second flush interval reduces disk writes
+  - Memory cleanup task removes stale player data every 5 minutes
+  - Proper shutdown handling ensures pending writes are flushed
+
+### Fixed
+
+- Console no longer shows `TextComponentImpl{...}` blobs for admin notifications
+
+### Example Detection Entry
+
+```json
+{
+  "uuid": "f999e944-a15d-4287-bff4-34f63a97832e",
+  "username": "PlayerName",
+  "mods": ["Simple Voice Chat", "Noxesium", "AppleSkin", "Fabric API"],
+  "channels": ["civ:handshake", "civ:class_xp"],
+  "firstSeen": "2026-01-16T17:28:01Z",
+  "lastSeen": "2026-01-16T17:32:04Z",
+  "totalTimePlayedSeconds": 243,
+  "sessionCount": 2,
+  "sessions": [
+    {"joinTime": "2026-01-16T17:27:59Z", "leaveTime": "2026-01-16T17:28:01Z", "durationSeconds": 2},
+    {"joinTime": "2026-01-16T17:29:20Z", "leaveTime": "2026-01-16T17:32:04Z", "durationSeconds": 241}
+  ]
+}
+```
+
 ## [1.2.0] - 2026-01-16
 
 ### Added
