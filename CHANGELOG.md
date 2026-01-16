@@ -2,6 +2,22 @@
 
 All notable changes to ModDetectorPlugin will be documented in this file.
 
+## [1.2.2] - 2026-01-16
+
+### Added
+
+- **50+ New Mod Definitions**
+  - Popular mods: Roughly Enough Items (REI), Distant Horizons, Axiom, Waystones, WorldEdit, Do a Barrel Roll
+  - Voice chat: Plasmo Voice, Replay Voice Chat, PV Addon Flashback
+  - Controller support: Controlify, MidnightControls
+  - Recording: ReplayMod, Flashback
+  - Libraries: GeckoLib, Balm, Puzzles Lib, owo-lib, CreativeCore, XaeroLib, Fzzy Config, LibGui
+  - Visual mods: Shulker Box Tooltip, Pick Up Notifier, Better Statistics Screen, Subtle Effects
+  - Utility: Crafting Tweaks, Client Sort, Inventory Essentials, Horse Expert, PatPat
+  - Player customization: Custom Player Models, Skin Shuffle, Wildfire's Female Gender Mod
+  - Third-party clients: Lunar Client, Badlion Client, Feather Client, Essential, NoRisk Client
+  - And many more community-contributed channel mappings
+
 ## [1.2.1] - 2026-01-16
 
 ### Added
