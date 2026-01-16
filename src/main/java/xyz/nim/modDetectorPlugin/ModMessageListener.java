@@ -10,6 +10,7 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 
 import java.time.Instant;
 import java.util.Map;
@@ -34,6 +35,35 @@ public class ModMessageListener {
         this.plugin = plugin;
         this.config = config;
         this.detectionLogger = detectionLogger;
+        startCleanupTask();
+    }
+
+    private void startCleanupTask() {
+        // Clean up stale entries every 5 minutes
+        plugin.getServer().getScheduler()
+                .buildTask(plugin, this::cleanupStaleEntries)
+                .repeat(5, TimeUnit.MINUTES)
+                .schedule();
+    }
+
+    private void cleanupStaleEntries() {
+        Instant cutoff = Instant.now().minusSeconds(600); // 10 minutes
+
+        // Clean up entries for players who are no longer online
+        Set<UUID> onlineUuids = ConcurrentHashMap.newKeySet();
+        for (Player player : plugin.getServer().getAllPlayers()) {
+            onlineUuids.add(player.getUniqueId());
+        }
+
+        // Remove tracking data for offline players
+        sessionStartTimes.keySet().removeIf(uuid -> !onlineUuids.contains(uuid));
+        detectedChannels.keySet().removeIf(uuid -> !onlineUuids.contains(uuid));
+        allRegisteredChannels.keySet().removeIf(uuid -> !onlineUuids.contains(uuid));
+        pendingKicks.removeIf(uuid -> !onlineUuids.contains(uuid));
+
+        if (config.isDebug()) {
+            plugin.getLogger().info("[DEBUG] Cleaned up stale tracking entries");
+        }
     }
 
     @Subscribe
@@ -45,6 +75,7 @@ public class ModMessageListener {
     @Subscribe
     public void onChannelRegister(PlayerChannelRegisterEvent event) {
         Player player = event.getPlayer();
+        UUID uuid = player.getUniqueId();
 
         for (ChannelIdentifier channel : event.getChannels()) {
             String channelId = channel.getId();
@@ -54,7 +85,6 @@ public class ModMessageListener {
             }
 
             // Always track all channels in memory for /md info command
-            UUID uuid = player.getUniqueId();
             Set<String> channels = allRegisteredChannels.computeIfAbsent(uuid, k -> ConcurrentHashMap.newKeySet());
             if (channels.add(channelId)) {
                 // New channel registered - log to file if log-all-channels is enabled
@@ -81,44 +111,42 @@ public class ModMessageListener {
         Instant joinTime = sessionStartTimes.remove(uuid);
         Instant leaveTime = Instant.now();
 
+        // Always log detections on disconnect (if there were any and not kicking)
         Set<String> channels = detectedChannels.remove(uuid);
-        if (channels != null && !channels.isEmpty() && config.getAction() == ModFilterConfig.Action.LOG) {
+        if (channels != null && !channels.isEmpty() && !config.isKick()) {
             detectionLogger.logDetection(player, channels, joinTime, leaveTime);
         }
 
         // Clean up all registered channels tracking
         allRegisteredChannels.remove(uuid);
-
         pendingKicks.remove(uuid);
     }
 
     private void handleBlockedChannel(Player player, String channel) {
         UUID uuid = player.getUniqueId();
-        ModFilterConfig.Action action = config.getAction();
 
         String modName = config.getModName(channel);
         Set<String> playerMods = detectedChannels.computeIfAbsent(uuid, k -> ConcurrentHashMap.newKeySet());
         boolean isNewDetection = playerMods.add(modName);
 
-        if (action == ModFilterConfig.Action.LOG || action == ModFilterConfig.Action.BOTH) {
-            String logMessage = config.formatLogMessage(player.getUsername(), channel);
-            plugin.getLogger().warn(logMessage);
-        }
+        // Always log to console
+        String logMessage = config.formatLogMessage(player.getUsername(), channel);
+        plugin.getLogger().warn(logMessage);
 
         if (config.isNotifyAdmins()) {
             notifyAdmins(player, modName, channel);
         }
 
-        if (action == ModFilterConfig.Action.KICK || action == ModFilterConfig.Action.BOTH) {
+        if (config.isKick()) {
+            // Schedule kick with batching
             if (pendingKicks.add(uuid)) {
-                // Schedule kick with a small delay to batch multiple channel detections
                 plugin.getServer().getScheduler()
                         .buildTask(plugin, () -> executeKick(player))
                         .delay(1, TimeUnit.SECONDS)
                         .schedule();
             }
-        } else if (action == ModFilterConfig.Action.LOG && isNewDetection) {
-            // In LOG-only mode, write to file immediately for each new detection
+        } else if (isNewDetection) {
+            // Not kicking - log detection immediately for each new mod
             Instant joinTime = sessionStartTimes.get(uuid);
             detectionLogger.logDetection(player, Set.of(modName), joinTime, Instant.now());
         }
@@ -175,6 +203,8 @@ public class ModMessageListener {
             }
         }
 
-        plugin.getLogger().info(message.toString());
+        // Log plain text to console
+        String plainText = PlainTextComponentSerializer.plainText().serialize(message);
+        plugin.getLogger().info(plainText);
     }
 }

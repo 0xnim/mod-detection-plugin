@@ -15,6 +15,8 @@ import com.velocitypowered.api.plugin.annotation.DataDirectory;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.ClickEvent;
+import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.slf4j.Logger;
 
@@ -26,7 +28,7 @@ import java.util.UUID;
 @Plugin(
         id = "moddetector",
         name = "ModDetectorPlugin",
-        version = "1.2.0-velocity",
+        version = "1.2.1-velocity",
         description = "Detects and filters client mods via plugin message channels",
         authors = {"nim"}
 )
@@ -64,6 +66,9 @@ public class ModDetectorPlugin {
 
     @Subscribe
     public void onProxyShutdown(ProxyShutdownEvent event) {
+        if (detectionLogger != null) {
+            detectionLogger.shutdown();
+        }
         logger.info("ModDetector disabled");
     }
 
@@ -102,8 +107,8 @@ public class ModDetectorPlugin {
                             sender.sendMessage(Component.text("=== ModDetector Status ===", NamedTextColor.GOLD));
                             sender.sendMessage(Component.text("Mode: ", NamedTextColor.GRAY)
                                     .append(Component.text(modFilterConfig.getMode().name(), NamedTextColor.YELLOW)));
-                            sender.sendMessage(Component.text("Action: ", NamedTextColor.GRAY)
-                                    .append(Component.text(modFilterConfig.getAction().name(), NamedTextColor.YELLOW)));
+                            sender.sendMessage(Component.text("Kick: ", NamedTextColor.GRAY)
+                                    .append(Component.text(modFilterConfig.isKick() ? "enabled" : "disabled", NamedTextColor.YELLOW)));
                             sender.sendMessage(Component.text("Debug: ", NamedTextColor.GRAY)
                                     .append(Component.text(modFilterConfig.isDebug() ? "enabled" : "disabled", NamedTextColor.YELLOW)));
                             sender.sendMessage(Component.text("Log All Channels: ", NamedTextColor.GRAY)
@@ -162,11 +167,14 @@ public class ModDetectorPlugin {
 
                             dataToShow.forEach((uuid, channels) -> {
                                 server.getPlayer(uuid).ifPresent(player -> {
-                                    sender.sendMessage(Component.text("  " + player.getUsername(), NamedTextColor.YELLOW)
-                                            .append(Component.text(" (" + channels.size() + " channels)", NamedTextColor.GRAY)));
+                                    String playerName = player.getUsername();
+                                    Component playerComponent = Component.text("  " + playerName, NamedTextColor.YELLOW)
+                                            .append(Component.text(" (" + channels.size() + " channels)", NamedTextColor.GRAY))
+                                            .hoverEvent(HoverEvent.showText(Component.text("Click to view channels", NamedTextColor.AQUA)))
+                                            .clickEvent(ClickEvent.runCommand("/md info " + playerName));
+                                    sender.sendMessage(playerComponent);
                                 });
                             });
-                            sender.sendMessage(Component.text("Use /md info <player> for details", NamedTextColor.GRAY));
                             return 1;
                         }))
                 .then(LiteralArgumentBuilder.<CommandSource>literal("info")
