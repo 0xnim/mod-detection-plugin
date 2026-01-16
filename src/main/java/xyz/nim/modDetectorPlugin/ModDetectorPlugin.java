@@ -167,13 +167,27 @@ public final class ModDetectorPlugin extends JavaPlugin {
 
                                                 // Show historical data if available
                                                 var historicalData = detectionLogger.getPlayerData(uuid);
-                                                if (historicalData != null && !historicalData.channels.isEmpty()) {
-                                                    sender.sendMessage(Component.text("Historical (" + historicalData.channels.size() + " channels):", NamedTextColor.YELLOW));
-                                                    sender.sendMessage(Component.text("  Last seen: " + historicalData.lastSeen, NamedTextColor.GRAY));
-                                                    for (String channel : historicalData.channels) {
-                                                        String modName = modFilterConfig.getModName(channel);
-                                                        sender.sendMessage(Component.text("  " + channel, NamedTextColor.AQUA)
-                                                                .append(Component.text(" -> " + modName, NamedTextColor.GRAY)));
+                                                if (historicalData != null) {
+                                                    boolean hasMods = historicalData.mods != null && !historicalData.mods.isEmpty();
+                                                    boolean hasChannels = historicalData.channels != null && !historicalData.channels.isEmpty();
+
+                                                    if (hasMods || hasChannels) {
+                                                        sender.sendMessage(Component.text("Historical Data:", NamedTextColor.YELLOW));
+                                                        sender.sendMessage(Component.text("  Last seen: " + historicalData.lastSeen, NamedTextColor.GRAY));
+
+                                                        if (hasMods) {
+                                                            sender.sendMessage(Component.text("  Mods (" + historicalData.mods.size() + "):", NamedTextColor.AQUA));
+                                                            for (String mod : historicalData.mods) {
+                                                                sender.sendMessage(Component.text("    " + mod, NamedTextColor.WHITE));
+                                                            }
+                                                        }
+
+                                                        if (hasChannels) {
+                                                            sender.sendMessage(Component.text("  Unknown Channels (" + historicalData.channels.size() + "):", NamedTextColor.GRAY));
+                                                            for (String channel : historicalData.channels) {
+                                                                sender.sendMessage(Component.text("    " + channel, NamedTextColor.DARK_GRAY));
+                                                            }
+                                                        }
                                                     }
                                                 }
 
