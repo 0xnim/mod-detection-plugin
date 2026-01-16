@@ -139,6 +139,13 @@ public class DetectionLogger {
         data.channels.add(channel);
         data.lastSeen = TIMESTAMP_FORMAT.format(Instant.now());
 
+        // Resolve channel to mod name and add to mods set
+        String modName = plugin.getModFilterConfig().getModName(channel);
+        if (!modName.equals(channel)) {
+            // Only add if it resolved to a known mod name
+            data.mods.add(modName);
+        }
+
         boolean isNewChannel = discoveredChannels.add(channel);
 
         // Mark for batched write instead of immediate write
