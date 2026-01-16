@@ -106,3 +106,326 @@ mods:
     description: "Forge config system ported to Fabric"
     channels:
       - "forgeconfigapiport:*"
+
+  clientsort:
+    name: "Client Sort"
+    description: "Versatile and easy inventory sorting"
+    channels:
+      - "clientsort:*"
+
+  roughlyenoughitems:
+    name: "Roughly Enough Items (REI)"
+    description: "Alternative to Just Enough Items/JEI"
+    channels:
+      - "roughlyenoughitems:*"
+
+  craftingtweaks:
+    name: "Crafting Tweaks"
+    description: "Rotate, balance or clear the crafting matrix"
+    channels:
+      - "craftingtweaks:*"
+
+  doabarrelroll:
+    name: "Do a Barrel Roll"
+    description: "Flight simulator controls for Minecraft elytras"
+    channels:
+      - "do_a_barrel_roll:*"
+
+  controlify:
+    name: "Controlify"
+    description: "Controller support for Minecraft Java"
+    channels:
+      - "controlify:*"
+
+  distanthorizons:
+    name: "Distant Horizons"
+    description: "LOD mod for extended render distances"
+    channels:
+      - "distant_horizons:*"
+
+  creativecore:
+    name: "CreativeCore"
+    description: "Core library mod"
+    channels:
+      - "creativecore:*"
+
+  fzzyconfig:
+    name: "Fzzy Config"
+    description: "Config API with GUIs and server-client sync"
+    channels:
+      - "fzzy_config:*"
+
+  plasmovoice:
+    name: "Plasmo Voice"
+    description: "Proximity voice chat with audio positioning"
+    channels:
+      - "plasmo:*"
+
+  replaymod:
+    name: "ReplayMod"
+    description: "Record, relive and share gameplay"
+    channels:
+      - "replaymod:*"
+
+  replayvoicechat:
+    name: "Replay Voice Chat"
+    description: "Record Simple Voice Chat with ReplayMod"
+    channels:
+      - "replayvoicechat:*"
+
+  vivecraft:
+    name: "Vivecraft"
+    description: "VR mod for Minecraft"
+    channels:
+      - "vivecraft:*"
+
+  axiom:
+    name: "Axiom"
+    description: "All-in-one tool for editing Minecraft worlds"
+    channels:
+      - "axiom:*"
+
+  puzzleslib:
+    name: "Puzzles Lib"
+    description: "Modding library"
+    channels:
+      - "puzzleslib:*"
+
+  pvaddonflashback:
+    name: "PV Addon Flashback"
+    description: "Record Plasmo Voice with Flashback"
+    channels:
+      - "pvaddonflashback:*"
+
+  pickupnotifier:
+    name: "Pick Up Notifier"
+    description: "Notifications for collected items"
+    channels:
+      - "pickupnotifier:*"
+
+  owo:
+    name: "oωo (owo-lib)"
+    description: "Utility, GUI and config library"
+    channels:
+      - "owo:*"
+
+  xaerolib:
+    name: "XaeroLib"
+    description: "Shared library for Xaero's mods"
+    channels:
+      - "xaerolib:*"
+
+  midnightcontrols:
+    name: "MidnightControls"
+    description: "Controller support and enhanced controls"
+    channels:
+      - "midnightcontrols:*"
+
+  horseexpert:
+    name: "Horse Expert"
+    description: "View horse statistics"
+    channels:
+      - "horseexpert:*"
+
+  waystones:
+    name: "Waystones"
+    description: "Teleport to activated waystones"
+    channels:
+      - "waystones:*"
+
+  balm:
+    name: "Balm"
+    description: "Cross-platform modding library"
+    channels:
+      - "balm:*"
+
+  geckolib:
+    name: "GeckoLib"
+    description: "Animation library for mods"
+    channels:
+      - "geckolib:*"
+
+  subtleeffects:
+    name: "Subtle Effects"
+    description: "Enhanced visual effects for entities and blocks"
+    channels:
+      - "subtle_effects:*"
+
+  customplayermodels:
+    name: "Custom Player Models"
+    description: "Customize player models"
+    channels:
+      - "cpm_net:*"
+
+  animatium:
+    name: "Animatium"
+    description: "Animation tweaks mod"
+    channels:
+      - "animatium:*"
+
+  shulkerboxtooltip:
+    name: "Shulker Box Tooltip"
+    description: "Preview shulker box contents"
+    channels:
+      - "shulkerboxtooltip:*"
+
+  skinshuffle:
+    name: "Skin Shuffle"
+    description: "Switch skins in-game"
+    channels:
+      - "skinshuffle:*"
+
+  hotbarapi:
+    name: "Hotbar API"
+    description: "Hotbar customization API"
+    channels:
+      - "hotbarapi:*"
+
+  betterstats:
+    name: "Better Statistics Screen"
+    description: "Improved statistics UI"
+    channels:
+      - "betterstats:*"
+
+  inventoryessentials:
+    name: "Inventory Essentials"
+    description: "Inventory management improvements"
+    channels:
+      - "inventoryessentials:*"
+
+  wildfireFGM:
+    name: "Wildfire's Female Gender Mod"
+    description: "Character customization mod"
+    channels:
+      - "wildfire_gender:*"
+
+  statuemenus:
+    name: "Statue Menus"
+    description: "Armor stand customization"
+    channels:
+      - "statuemenus:*"
+
+  strawstatues:
+    name: "Straw Statues"
+    description: "Decorative statue mod"
+    channels:
+      - "strawstatues:*"
+
+  libjfconfig:
+    name: "LibJF Config"
+    description: "Config library"
+    channels:
+      - "libjf-config-network-v0:*"
+
+  libgui:
+    name: "LibGui"
+    description: "GUI library for Fabric"
+    channels:
+      - "libgui:*"
+
+  patpat:
+    name: "PatPat"
+    description: "Pat entities"
+    channels:
+      - "patpat:*"
+
+  improvedmapcolors:
+    name: "Improved Map Colors"
+    description: "Better map color rendering"
+    channels:
+      - "improvedmapcolors:*"
+
+  redstonetools:
+    name: "Redstone Tools"
+    description: "Tools for redstone building"
+    channels:
+      - "redstonetools:*"
+
+  tcdcommons:
+    name: "TCDCommons"
+    description: "Common library mod"
+    channels:
+      - "tcdcommons:*"
+
+  effectinsights:
+    name: "Effect Insights"
+    description: "Detailed potion effect info"
+    channels:
+      - "effectinsights:*"
+
+  tooltipinsights:
+    name: "Tooltip Insights"
+    description: "Enhanced tooltip information"
+    channels:
+      - "tooltipinsights:*"
+
+  worldedit:
+    name: "WorldEdit"
+    description: "In-game world editing"
+    channels:
+      - "worldedit:*"
+
+  mocap:
+    name: "Mocap"
+    description: "Motion capture mod"
+    channels:
+      - "mocap:*"
+
+  explosiveenhancement:
+    name: "Explosive Enhancement"
+    description: "Enhanced explosion visuals"
+    channels:
+      - "minecraft:explosiveenhancement"
+
+  fancymenu:
+    name: "FancyMenu"
+    description: "Menu customization mod"
+    channels:
+      - "minecraft:fancymenu_packet_bridge"
+
+  chiseledbookshelfvisualizer:
+    name: "Chiseled Bookshelf Visualizer"
+    description: "See bookshelf contents"
+    channels:
+      - "chiseled-bookshelf-visualizer:*"
+      - "bookshelfinspector:*"
+
+  compassribbon:
+    name: "Compass Ribbon"
+    description: "Compass HUD overlay"
+    channels:
+      - "cr-compass-ribbon:*"
+
+  # Client mods (third-party clients)
+  lunarclient:
+    name: "Lunar Client"
+    description: "Lunar Client"
+    channels:
+      - "lunarclient:*"
+      - "lunar:*"
+      - "apollo:*"
+
+  badlionclient:
+    name: "Badlion Client"
+    description: "Badlion Client"
+    channels:
+      - "badlion:*"
+
+  featherclient:
+    name: "Feather Client"
+    description: "Feather Client"
+    channels:
+      - "feather:*"
+
+  essential:
+    name: "Essential"
+    description: "Essential mod"
+    channels:
+      - "essential:*"
+
+  norisk:
+    name: "NoRisk Client"
+    description: "NoRisk Client"
+    channels:
+      - "norisk:*"
+
