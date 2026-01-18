@@ -164,7 +164,9 @@ public class DetectionLogger {
         }
     }
 
-    public void logDetection(Player player, Set<String> detectedMods, Instant joinTime, Instant leaveTime) {
+    private static final int DELTA_THRESHOLD = 3; // Use delta if changes < this, otherwise full
+
+    public void logDetection(Player player, Set<String> sessionMods, Set<String> sessionChannels, Instant joinTime, Instant leaveTime) {
         if (!plugin.getModFilterConfig().isTrackDetections()) {
             return;
         }
@@ -178,56 +180,132 @@ public class DetectionLogger {
             sessionDurationSeconds = Duration.between(joinTime, leaveTime).getSeconds();
         }
 
+        String joinTimeStr = joinTime != null ? TIMESTAMP_FORMAT.format(joinTime) : null;
+        String leaveTimeStr = TIMESTAMP_FORMAT.format(leaveTime);
+
+        // Normalize nulls to empty sets for comparison
+        Set<String> currentMods = sessionMods != null ? sessionMods : new LinkedHashSet<>();
+
         // Get or create player data
         PlayerChannelData existingData = playerDataCache.get(uuid);
 
-        if (existingData != null && existingData.mods != null && existingData.mods.equals(detectedMods)) {
-            // Mods haven't changed - just update session info
+        if (existingData != null) {
+            // Get previous session's mods to compute delta
+            Set<String> previousMods = getModsForSession(existingData.sessions, existingData.sessions.size() - 1);
+
+            // Compute delta
+            Set<String> added = new LinkedHashSet<>(currentMods);
+            added.removeAll(previousMods);
+            Set<String> removed = new LinkedHashSet<>(previousMods);
+            removed.removeAll(currentMods);
+
+            int totalChanges = added.size() + removed.size();
+
+            // Create appropriate session record
+            SessionRecord session;
+            if (totalChanges == 0) {
+                // No changes - minimal record
+                session = SessionRecord.unchanged(joinTimeStr, leaveTimeStr, sessionDurationSeconds, sessionChannels);
+            } else if (totalChanges < DELTA_THRESHOLD) {
+                // Small change - use delta
+                session = SessionRecord.delta(joinTimeStr, leaveTimeStr, sessionDurationSeconds, added, removed, sessionChannels);
+            } else {
+                // Big change - use full
+                session = SessionRecord.full(joinTimeStr, leaveTimeStr, sessionDurationSeconds, currentMods, sessionChannels);
+            }
+
+            // Update existing player record
             existingData.username = username;
             existingData.lastSeen = timestamp;
             existingData.totalTimePlayedSeconds += sessionDurationSeconds;
             existingData.sessionCount++;
 
-            // Add session record
-            SessionRecord session = new SessionRecord(
-                    joinTime != null ? TIMESTAMP_FORMAT.format(joinTime) : null,
-                    TIMESTAMP_FORMAT.format(leaveTime),
-                    sessionDurationSeconds
-            );
+            // Merge mods and channels into aggregate sets
+            existingData.mods.addAll(currentMods);
+            if (sessionChannels != null) {
+                existingData.channels.addAll(sessionChannels);
+            }
+
             if (existingData.sessions == null) {
                 existingData.sessions = new ArrayList<>();
             }
             existingData.sessions.add(session);
 
             if (plugin.getModFilterConfig().isDebug()) {
-                plugin.getLogger().info("[DEBUG] Updated existing detection record for " + username +
-                        " (same mods, session #" + existingData.sessionCount + ")");
+                String format = totalChanges == 0 ? "unchanged" : (totalChanges < DELTA_THRESHOLD ? "delta" : "full");
+                plugin.getLogger().info("[DEBUG] Updated detection record for " + username +
+                        " (session #" + existingData.sessionCount + ", format: " + format + ", mods: " + currentMods + ")");
             }
         } else {
-            // New mods or first detection - create/update full record
+            // First detection - create new record with full mods
+            SessionRecord session = SessionRecord.full(joinTimeStr, leaveTimeStr, sessionDurationSeconds, currentMods, sessionChannels);
+
             PlayerChannelData newData = new PlayerChannelData(uuid, username);
-            newData.mods = new LinkedHashSet<>(detectedMods);
+            newData.mods = new LinkedHashSet<>(currentMods);
+            newData.channels = sessionChannels != null ? new LinkedHashSet<>(sessionChannels) : new LinkedHashSet<>();
             newData.lastSeen = timestamp;
             newData.firstSeen = timestamp;
             newData.totalTimePlayedSeconds = sessionDurationSeconds;
             newData.sessionCount = 1;
             newData.sessions = new ArrayList<>();
-            newData.sessions.add(new SessionRecord(
-                    joinTime != null ? TIMESTAMP_FORMAT.format(joinTime) : null,
-                    TIMESTAMP_FORMAT.format(leaveTime),
-                    sessionDurationSeconds
-            ));
+            newData.sessions.add(session);
 
             playerDataCache.put(uuid, newData);
 
             if (plugin.getModFilterConfig().isDebug()) {
                 plugin.getLogger().info("[DEBUG] Created new detection record for " + username +
-                        " (mods: " + detectedMods + ")");
+                        " (mods: " + currentMods + ")");
             }
         }
 
         // Mark for batched write
         pendingPlayerDataWrite.set(true);
+    }
+
+    /**
+     * Reconstructs the full mod set for a given session index by walking from the last full snapshot.
+     */
+    public static Set<String> getModsForSession(List<SessionRecord> sessions, int sessionIndex) {
+        if (sessions == null || sessions.isEmpty() || sessionIndex < 0 || sessionIndex >= sessions.size()) {
+            return new LinkedHashSet<>();
+        }
+
+        // Find the last full snapshot at or before sessionIndex
+        int lastFullIndex = -1;
+        for (int i = sessionIndex; i >= 0; i--) {
+            if (sessions.get(i).hasFull()) {
+                lastFullIndex = i;
+                break;
+            }
+        }
+
+        if (lastFullIndex == -1) {
+            // No full snapshot found - shouldn't happen if data is valid
+            return new LinkedHashSet<>();
+        }
+
+        // Start with the full snapshot
+        Set<String> mods = new LinkedHashSet<>(sessions.get(lastFullIndex).mods);
+
+        // Apply deltas forward
+        for (int i = lastFullIndex + 1; i <= sessionIndex; i++) {
+            SessionRecord s = sessions.get(i);
+            if (s.hasFull()) {
+                // Another full snapshot - use it
+                mods = new LinkedHashSet<>(s.mods);
+            } else if (s.hasDelta()) {
+                // Apply delta
+                if (s.added != null) {
+                    mods.addAll(s.added);
+                }
+                if (s.removed != null) {
+                    mods.removeAll(s.removed);
+                }
+            }
+            // If neither full nor delta, mods unchanged
+        }
+
+        return mods;
     }
 
     private void writePlayerDataAtomic() {
@@ -293,17 +371,62 @@ public class DetectionLogger {
     }
 
     // Session record for tracking individual play sessions
+    // Uses delta compression: first session has full 'mods', subsequent sessions use +/- or full if big change
     public static class SessionRecord {
         public String joinTime;
         public String leaveTime;
         public long durationSeconds;
+        // Full mod list (used for first session or when changes are large)
+        public Set<String> mods;
+        // Delta fields (used when only small changes from previous session)
+        public Set<String> added;
+        public Set<String> removed;
+        // Channels (unknown) - always stored in full since they're typically few
+        public Set<String> channels;
 
         public SessionRecord() {}
 
-        public SessionRecord(String joinTime, String leaveTime, long durationSeconds) {
-            this.joinTime = joinTime;
-            this.leaveTime = leaveTime;
-            this.durationSeconds = durationSeconds;
+        // Constructor for full mod list
+        public static SessionRecord full(String joinTime, String leaveTime, long durationSeconds,
+                                         Set<String> mods, Set<String> channels) {
+            SessionRecord r = new SessionRecord();
+            r.joinTime = joinTime;
+            r.leaveTime = leaveTime;
+            r.durationSeconds = durationSeconds;
+            r.mods = mods != null && !mods.isEmpty() ? new LinkedHashSet<>(mods) : null;
+            r.channels = channels != null && !channels.isEmpty() ? new LinkedHashSet<>(channels) : null;
+            return r;
+        }
+
+        // Constructor for delta (added/removed)
+        public static SessionRecord delta(String joinTime, String leaveTime, long durationSeconds,
+                                          Set<String> added, Set<String> removed, Set<String> channels) {
+            SessionRecord r = new SessionRecord();
+            r.joinTime = joinTime;
+            r.leaveTime = leaveTime;
+            r.durationSeconds = durationSeconds;
+            r.added = added != null && !added.isEmpty() ? new LinkedHashSet<>(added) : null;
+            r.removed = removed != null && !removed.isEmpty() ? new LinkedHashSet<>(removed) : null;
+            r.channels = channels != null && !channels.isEmpty() ? new LinkedHashSet<>(channels) : null;
+            return r;
+        }
+
+        // Constructor for unchanged mods (only time info)
+        public static SessionRecord unchanged(String joinTime, String leaveTime, long durationSeconds, Set<String> channels) {
+            SessionRecord r = new SessionRecord();
+            r.joinTime = joinTime;
+            r.leaveTime = leaveTime;
+            r.durationSeconds = durationSeconds;
+            r.channels = channels != null && !channels.isEmpty() ? new LinkedHashSet<>(channels) : null;
+            return r;
+        }
+
+        public boolean hasFull() {
+            return mods != null;
+        }
+
+        public boolean hasDelta() {
+            return added != null || removed != null;
         }
     }
 

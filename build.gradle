@@ -3,7 +3,7 @@ plugins {
 }
 
 group = 'xyz.nim'
-version = '1.2.1-velocity'
+version = '1.2.3-velocity'
 
 repositories {
     mavenCentral()

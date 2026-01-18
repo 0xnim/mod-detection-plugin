@@ -28,7 +28,7 @@ import java.util.UUID;
 @Plugin(
         id = "moddetector",
         name = "ModDetectorPlugin",
-        version = "1.2.1-velocity",
+        version = "1.2.3-velocity",
         description = "Detects and filters client mods via plugin message channels",
         authors = {"nim"}
 )
@@ -215,13 +215,15 @@ public class ModDetectorPlugin {
                                     if (historicalData != null) {
                                         boolean hasMods = historicalData.mods != null && !historicalData.mods.isEmpty();
                                         boolean hasChannels = historicalData.channels != null && !historicalData.channels.isEmpty();
+                                        boolean hasSessions = historicalData.sessions != null && !historicalData.sessions.isEmpty();
 
-                                        if (hasMods || hasChannels) {
+                                        if (hasMods || hasChannels || hasSessions) {
                                             sender.sendMessage(Component.text("Historical Data:", NamedTextColor.YELLOW));
-                                            sender.sendMessage(Component.text("  Last seen: " + historicalData.lastSeen, NamedTextColor.GRAY));
+                                            sender.sendMessage(Component.text("  First seen: " + historicalData.firstSeen, NamedTextColor.GRAY));
+                                            sender.sendMessage(Component.text("  Total playtime: " + formatDuration(historicalData.totalTimePlayedSeconds), NamedTextColor.GRAY));
 
                                             if (hasMods) {
-                                                sender.sendMessage(Component.text("  Mods (" + historicalData.mods.size() + "):", NamedTextColor.AQUA));
+                                                sender.sendMessage(Component.text("  All mods ever used (" + historicalData.mods.size() + "):", NamedTextColor.AQUA));
                                                 for (String mod : historicalData.mods) {
                                                     sender.sendMessage(Component.text("    " + mod, NamedTextColor.WHITE));
                                                 }
@@ -231,6 +233,21 @@ public class ModDetectorPlugin {
                                                 sender.sendMessage(Component.text("  Unknown Channels (" + historicalData.channels.size() + "):", NamedTextColor.GRAY));
                                                 for (String channel : historicalData.channels) {
                                                     sender.sendMessage(Component.text("    " + channel, NamedTextColor.DARK_GRAY));
+                                                }
+                                            }
+
+                                            if (hasSessions) {
+                                                sender.sendMessage(Component.text("  Sessions (" + historicalData.sessionCount + "):", NamedTextColor.YELLOW));
+                                                for (int i = 0; i < historicalData.sessions.size(); i++) {
+                                                    var session = historicalData.sessions.get(i);
+                                                    String duration = formatDuration(session.durationSeconds);
+                                                    // Reconstruct full mod list for this session
+                                                    var sessionMods = DetectionLogger.getModsForSession(historicalData.sessions, i);
+                                                    String modsStr = !sessionMods.isEmpty()
+                                                            ? String.join(", ", sessionMods)
+                                                            : "none";
+                                                    sender.sendMessage(Component.text("    " + session.joinTime + " (" + duration + ")", NamedTextColor.WHITE)
+                                                            .append(Component.text(" - " + modsStr, NamedTextColor.GRAY)));
                                                 }
                                             }
                                         }
@@ -276,5 +293,19 @@ public class ModDetectorPlugin {
 
     public ModFilterConfig getModFilterConfig() {
         return modFilterConfig;
+    }
+
+    private static String formatDuration(long seconds) {
+        if (seconds < 60) {
+            return seconds + "s";
+        } else if (seconds < 3600) {
+            long mins = seconds / 60;
+            long secs = seconds % 60;
+            return secs > 0 ? mins + "m " + secs + "s" : mins + "m";
+        } else {
+            long hours = seconds / 3600;
+            long mins = (seconds % 3600) / 60;
+            return mins > 0 ? hours + "h " + mins + "m" : hours + "h";
+        }
     }
 }
