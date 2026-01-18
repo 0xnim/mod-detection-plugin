@@ -120,15 +120,30 @@ public class ModMessageListener implements Listener, PluginMessageListener {
         Instant joinTime = sessionStartTimes.remove(uuid);
         Instant leaveTime = Instant.now();
 
-        // Always log detections on disconnect (if there were any and not kicking)
-        Set<String> channels = detectedChannels.remove(uuid);
-        if (channels != null && !channels.isEmpty() && !config.isKick()) {
-            detectionLogger.logDetection(player, channels, joinTime, leaveTime);
-        }
-
-        // Clean up all registered channels tracking
-        allRegisteredChannels.remove(uuid);
+        // Get all channels registered this session
+        Set<String> channels = allRegisteredChannels.remove(uuid);
+        detectedChannels.remove(uuid);
         pendingKicks.remove(uuid);
+
+        // Log session with all mods and channels
+        if (channels != null && !channels.isEmpty()) {
+            // Resolve channels into known mods and unknown channels
+            Set<String> sessionMods = new java.util.LinkedHashSet<>();
+            Set<String> sessionUnknownChannels = new java.util.LinkedHashSet<>();
+
+            for (String channel : channels) {
+                String modName = config.getModName(channel);
+                if (!modName.equals(channel)) {
+                    // Known mod
+                    sessionMods.add(modName);
+                } else {
+                    // Unknown channel
+                    sessionUnknownChannels.add(channel);
+                }
+            }
+
+            detectionLogger.logDetection(player, sessionMods, sessionUnknownChannels, joinTime, leaveTime);
+        }
     }
 
     private void handleBlockedChannel(Player player, String channel) {
@@ -151,11 +166,8 @@ public class ModMessageListener implements Listener, PluginMessageListener {
             if (pendingKicks.add(uuid)) {
                 Bukkit.getScheduler().runTaskLater(plugin, () -> executeKick(player), 20L);
             }
-        } else if (isNewDetection) {
-            // Not kicking - log detection immediately for each new mod
-            Instant joinTime = sessionStartTimes.get(uuid);
-            detectionLogger.logDetection(player, Set.of(modName), joinTime, Instant.now());
         }
+        // Note: Session logging now happens on quit via onPlayerQuit
     }
 
     private void executeKick(Player player) {
@@ -169,16 +181,36 @@ public class ModMessageListener implements Listener, PluginMessageListener {
             return;
         }
 
-        Set<String> channels = detectedChannels.remove(uuid);
-        if (channels == null || channels.isEmpty()) {
+        Set<String> blockedMods = detectedChannels.remove(uuid);
+        if (blockedMods == null || blockedMods.isEmpty()) {
             return;
         }
 
         Instant joinTime = sessionStartTimes.remove(uuid);
         Instant kickTime = Instant.now();
-        detectionLogger.logDetection(player, channels, joinTime, kickTime);
 
-        String modList = String.join(", ", channels);
+        // Get all channels and resolve to mods/unknown
+        Set<String> allChannels = allRegisteredChannels.remove(uuid);
+        Set<String> sessionMods = new java.util.LinkedHashSet<>();
+        Set<String> sessionUnknownChannels = new java.util.LinkedHashSet<>();
+
+        if (allChannels != null) {
+            for (String channel : allChannels) {
+                String modName = config.getModName(channel);
+                if (!modName.equals(channel)) {
+                    sessionMods.add(modName);
+                } else {
+                    sessionUnknownChannels.add(channel);
+                }
+            }
+        } else {
+            // Fallback to blocked mods if no channel data
+            sessionMods.addAll(blockedMods);
+        }
+
+        detectionLogger.logDetection(player, sessionMods, sessionUnknownChannels, joinTime, kickTime);
+
+        String modList = String.join(", ", blockedMods);
         Component kickComponent = miniMessage.deserialize(
                 config.getKickMessageFormat(),
                 Placeholder.unparsed("mods", modList)
