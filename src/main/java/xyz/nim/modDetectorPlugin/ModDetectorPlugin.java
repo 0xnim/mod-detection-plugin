@@ -288,6 +288,7 @@ public final class ModDetectorPlugin extends JavaPlugin {
     public void onDisable() {
         getServer().getMessenger().unregisterIncomingPluginChannel(this);
         detectionLogger.shutdown();
+        foliaLib.getScheduler().cancelAllTasks();
         getLogger().info("ModDetector disabled");
     }
 

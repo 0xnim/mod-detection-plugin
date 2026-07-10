@@ -4,7 +4,7 @@ All notable changes to ModDetectorPlugin will be documented in this file.
 ## [1.2.4] - 2026-01-18
 
 ### Changed
-- **Compatability changes**
+- **Compatibility changes**
   - Bumped to version 26.1.2
   - Added Folia compatability
 
