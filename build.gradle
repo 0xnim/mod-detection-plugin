@@ -29,9 +29,10 @@ dependencies {
     implementation("com.google.code.gson:gson:2.11.0")
 }
 tasks.shadowJar {
-    String prefix = "xyz.nim.moddetectorplugin.shadow"
+    archiveClassifier.set('')
+    String prefix = "xyz.nim.modDetectorPlugin"
 
-    relocate("com.tcoded.folialib", prefix+ ".folialib")
+    relocate 'com.tcoded.folialib', "${prefix}.folialib"
 }
 tasks {
     runServer {
