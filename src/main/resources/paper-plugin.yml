@@ -1,8 +1,9 @@
 name: ModDetectorPlugin
 version: '${version}'
 main: xyz.nim.modDetectorPlugin.ModDetectorPlugin
-api-version: '1.21'
+api-version: '26.1'
 description: Detects and filters client mods via plugin message channels
+folia-supported: true
 
 permissions:
   moddetector.admin:

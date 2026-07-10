@@ -2,6 +2,7 @@ package xyz.nim.modDetectorPlugin;
 
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.arguments.StringArgumentType;
+import com.tcoded.folialib.FoliaLib;
 import io.papermc.paper.command.brigadier.Commands;
 import io.papermc.paper.command.brigadier.argument.ArgumentTypes;
 import io.papermc.paper.plugin.lifecycle.event.LifecycleEventManager;
@@ -24,10 +25,12 @@ public final class ModDetectorPlugin extends JavaPlugin {
     private ModFilterConfig modFilterConfig;
     private ModMessageListener messageListener;
     private DetectionLogger detectionLogger;
+    public FoliaLib foliaLib;
 
     @Override
     public void onEnable() {
         modFilterConfig = new ModFilterConfig(this);
+        foliaLib = new FoliaLib(this);
         modFilterConfig.load();
 
         detectionLogger = new DetectionLogger(this);

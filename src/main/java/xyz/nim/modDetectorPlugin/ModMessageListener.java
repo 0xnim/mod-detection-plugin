@@ -42,7 +42,7 @@ public class ModMessageListener implements Listener, PluginMessageListener {
 
     private void startCleanupTask() {
         // Clean up stale entries every 5 minutes (6000 ticks)
-        Bukkit.getScheduler().runTaskTimer(plugin, this::cleanupStaleEntries, 6000L, 6000L);
+        plugin.foliaLib.getScheduler().runTimer(this::cleanupStaleEntries, 6000L, 6000L);
     }
 
     private void cleanupStaleEntries() {
@@ -164,7 +164,7 @@ public class ModMessageListener implements Listener, PluginMessageListener {
         if (config.isKick()) {
             // Schedule kick with batching
             if (pendingKicks.add(uuid)) {
-                Bukkit.getScheduler().runTaskLater(plugin, () -> executeKick(player), 20L);
+                plugin.foliaLib.getScheduler().runAtEntityLater(player, () -> executeKick(player), 20L);
             }
         }
         // Note: Session logging now happens on quit via onPlayerQuit

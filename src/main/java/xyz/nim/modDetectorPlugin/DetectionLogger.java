@@ -113,7 +113,7 @@ public class DetectionLogger {
 
     private void startBatchedWriteScheduler() {
         // Flush pending writes every 30 seconds (600 ticks)
-        Bukkit.getScheduler().runTaskTimerAsynchronously(plugin, this::flushPendingWrites, 600L, 600L);
+        plugin.foliaLib.getScheduler().runTimerAsync(this::flushPendingWrites, 600L, 600L);
     }
 
     private void flushPendingWrites() {

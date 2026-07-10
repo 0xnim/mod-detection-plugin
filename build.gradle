@@ -1,10 +1,11 @@
 plugins {
     id 'java'
-    id("xyz.jpenilla.run-paper") version "2.3.1"
+    id("xyz.jpenilla.run-paper") version "3.0.2"
+    id("com.gradleup.shadow") version "9.4.1"
 }
 
 group = 'xyz.nim'
-version = '1.2.3'
+version = '1.2.4'
 
 repositories {
     mavenCentral()
@@ -16,23 +17,33 @@ repositories {
         name = "dmulloy2-repo"
         url = "https://repo.dmulloy2.net/repository/public/"
     }
+    maven {
+        url = "https://repo.tcoded.com/releases"
+        name = "tcoded-releases"
+    }
 }
 
 dependencies {
-    compileOnly("io.papermc.paper:paper-api:1.21.8-R0.1-SNAPSHOT")
+    compileOnly("io.papermc.paper:paper-api:26.1.2.build.+")
+    implementation("com.tcoded:FoliaLib:0.5.1")
     implementation("com.google.code.gson:gson:2.11.0")
 }
+tasks.shadowJar {
+    String prefix = "xyz.nim.moddetectorplugin.shadow"
 
+    relocate("com.tcoded.folialib", prefix+ ".folialib")
+}
 tasks {
     runServer {
         // Configure the Minecraft version for our task.
         // This is the only required configuration besides applying the plugin.
         // Your plugin's jar (or shadowJar if present) will be used automatically.
-        minecraftVersion("1.21.8")
+        minecraftVersion("26.1.2")
     }
+    runPaper.folia.registerTask()
 }
 
-def targetJavaVersion = 21
+def targetJavaVersion = 25
 java {
     def javaVersion = JavaVersion.toVersion(targetJavaVersion)
     sourceCompatibility = javaVersion
