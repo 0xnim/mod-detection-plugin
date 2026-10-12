@@ -3,13 +3,19 @@ package xyz.nim.modDetectorPlugin;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.entity.Player;
+import org.jetbrains.annotations.NotNull;
 
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 import java.util.regex.Pattern;
 
 public class ModFilterConfig {
@@ -47,6 +53,8 @@ public class ModFilterConfig {
     private boolean notifyAdmins;
     private boolean trackDetections;
     private boolean logAllChannels;
+    private final Set<String> whitelistedPlayers = new HashSet<>();
+    private boolean whitelistOperators;
 
     private final Map<String, ModDefinition> knownMods = new HashMap<>();
     private final Map<String, ModDefinition> customMods = new HashMap<>();
@@ -79,6 +87,8 @@ public class ModFilterConfig {
         this.notifyAdmins = config.getBoolean("notify-admins", true);
         this.trackDetections = config.getBoolean("track-detections", true);
         this.logAllChannels = config.getBoolean("log-all-channels", false);
+        this.whitelistOperators = config.getBoolean("whitelist-operators", false);
+        loadWhitelistedPlayers(config);
 
         loadCustomMods(config);
 
@@ -129,6 +139,45 @@ public class ModFilterConfig {
         }
 
         plugin.getLogger().info("Loaded " + patterns.size() + " channel patterns in " + mode + " mode");
+    }
+
+    private void loadWhitelistedPlayers(FileConfiguration config) {
+        whitelistedPlayers.clear();
+
+        for (String value : config.getStringList("whitelisted-players")) {
+            String normalized = normalizePlayerIdentifier(value);
+            if (!normalized.isEmpty()) {
+                whitelistedPlayers.add(normalized);
+            }
+        }
+
+        if (!whitelistedPlayers.isEmpty()) {
+            plugin.getLogger().info("Loaded " + whitelistedPlayers.size() + " whitelisted players");
+        }
+    }
+
+    private String normalizePlayerIdentifier(String value) {
+        if (value == null) {
+            return "";
+        }
+
+        String trimmed = value.trim();
+        if (trimmed.isEmpty()) {
+            return "";
+        }
+
+        try {
+            return UUID.fromString(trimmed).toString().toLowerCase(Locale.ROOT);
+        } catch (IllegalArgumentException ignored) {
+            return trimmed.toLowerCase(Locale.ROOT);
+        }
+    }
+
+    public boolean isPlayerWhitelisted(@NotNull Player player) {
+        String uuid = player.getUniqueId().toString().toLowerCase(Locale.ROOT);
+        String name = player.getName().toLowerCase(Locale.ROOT);
+
+        return player.isOp() && whitelistOperators || whitelistedPlayers.contains(uuid) || whitelistedPlayers.contains(name);
     }
 
     private void loadCustomMods(FileConfiguration config) {

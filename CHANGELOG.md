@@ -1,6 +1,14 @@
 # Changelog
 
 All notable changes to ModDetectorPlugin will be documented in this file.
+
+## [1.2.5] - 2026-01-18
+
+### Changed
+- **Compatibility changes**
+  - Bumped to version 26.2
+  - Added a player whitelist
+
 ## [1.2.4] - 2026-01-18
 
 ### Changed

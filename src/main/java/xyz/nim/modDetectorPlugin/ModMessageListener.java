@@ -14,6 +14,7 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerRegisterChannelEvent;
 import org.bukkit.plugin.messaging.PluginMessageListener;
+import org.jspecify.annotations.NonNull;
 
 import java.time.Instant;
 import java.util.Map;
@@ -74,6 +75,10 @@ public class ModMessageListener implements Listener, PluginMessageListener {
         Player player = event.getPlayer();
         String channel = event.getChannel();
 
+        if (config.isPlayerWhitelisted(player)) {
+            return;
+        }
+
         if (config.isDebug()) {
             plugin.getLogger().info("[DEBUG] Player " + player.getName() + " registered channel: " + channel);
         }
@@ -98,7 +103,11 @@ public class ModMessageListener implements Listener, PluginMessageListener {
     }
 
     @Override
-    public void onPluginMessageReceived(String channel, Player player, byte[] message) {
+    public void onPluginMessageReceived(@NonNull String channel, @NonNull Player player, byte @NonNull [] message) {
+        if (config.isPlayerWhitelisted(player)) {
+            return;
+        }
+
         if (config.isDebug()) {
             plugin.getLogger().info("[DEBUG] Received plugin message from " + player.getName() + " on channel: " + channel);
         }
@@ -147,6 +156,10 @@ public class ModMessageListener implements Listener, PluginMessageListener {
     }
 
     private void handleBlockedChannel(Player player, String channel) {
+        if (config.isPlayerWhitelisted(player)) {
+            return;
+        }
+
         UUID uuid = player.getUniqueId();
 
         String modName = config.getModName(channel);

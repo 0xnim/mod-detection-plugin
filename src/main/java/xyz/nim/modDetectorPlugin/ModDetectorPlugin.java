@@ -19,7 +19,6 @@ import org.bukkit.plugin.java.JavaPlugin;
 import java.util.Set;
 import java.util.UUID;
 
-@SuppressWarnings("UnstableApiUsage")
 public final class ModDetectorPlugin extends JavaPlugin {
 
     private ModFilterConfig modFilterConfig;

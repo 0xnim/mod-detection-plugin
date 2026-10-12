@@ -69,6 +69,14 @@ custom-patterns: []
 # OTHER SETTINGS
 # ============================================
 
+# Players on this list are exempt from all mod blocking checks and will not be kicked.
+# Accepts either player UUIDs or names, for example:
+# whitelisted-players:
+#   - "0f5d2a1a-8d3d-46a1-b2dd-c9c0e3f0db21"
+#   - "SomePlayerName"
+whitelisted-players: []
+
+whitelist-operators: false
 # Whether to log all incoming plugin messages to console (useful for discovering mod channels)
 debug: false
 
