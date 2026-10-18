@@ -209,34 +209,72 @@ final class AdminCommands {
         count(args, 1, 2);
         Player player = Bukkit.getPlayer(resolve(args.getFirst()));
         if (player == null) throw new IllegalArgumentException("The player must be online.");
-        List<String> rows = new ArrayList<>();
-        rows.add("Kicks enabled: " + config.isKick() + "; bypass permission: " + player.hasPermission("moddetector.bypass"));
-        for (String channel : new TreeSet<>(listener.getAllRegisteredChannels().getOrDefault(player.getUniqueId(), Set.of()))) {
-            rows.add(config.explain(channel) + "; temporary exception=" + listener.isExcepted(player, channel));
-        }
-        page(sender, "Rules for " + player.getName(), rows, pageArg(args, 1));
+        int requestedPage = pageArg(args, 1);
+        player.getScheduler().run(plugin, task -> {
+            List<String> rows = new ArrayList<>();
+            rows.add("Kicks enabled: " + config.isKick() + "; bypass permission: " + player.hasPermission("moddetector.bypass")
+                    + "; whitelisted=" + config.isPlayerWhitelisted(player));
+            for (String channel : new TreeSet<>(listener.getAllRegisteredChannels().getOrDefault(player.getUniqueId(), Set.of()))) {
+                rows.add(config.explain(channel) + "; temporary exception=" + listener.isExcepted(player, channel));
+            }
+            replyPage(sender, "Rules for " + player.getName(), rows, requestedPage);
+        }, null);
     }
 
     private void preview(CommandSender sender, List<String> args) {
         count(args, 1, 2);
         String pattern = args.getFirst();
         if (pattern.isBlank()) throw new IllegalArgumentException("Pattern cannot be empty.");
-        List<String> rows = new ArrayList<>();
+        int requestedPage = pageArg(args, 1);
+        var pending = new ArrayList<java.util.concurrent.CompletableFuture<List<String>>>();
         for (Player player : Bukkit.getOnlinePlayers()) {
-            boolean bypass = player.hasPermission("moddetector.bypass");
-            for (String channel : new TreeSet<>(listener.getAllRegisteredChannels().getOrDefault(player.getUniqueId(), Set.of()))) {
-                boolean before = config.shouldBlock(channel);
-                boolean after = config.previewBlocked(channel, pattern);
-                if (before == after) continue;
-                boolean kick = after && config.isKick() && config.getAction(channel) == ModFilterConfig.Action.KICK
-                        && !bypass && !listener.isExcepted(player, channel);
-                rows.add(player.getName() + ": " + channel + "; " + (before ? "BLOCKED" : "ALLOWED")
-                        + " -> " + (after ? "BLOCKED" : "ALLOWED") + "; would kick=" + kick);
-            }
+            var result = new java.util.concurrent.CompletableFuture<List<String>>();
+            pending.add(result);
+            var task = player.getScheduler().run(plugin, ignored -> {
+                try {
+                    List<String> rows = new ArrayList<>();
+                    boolean exempt = player.hasPermission("moddetector.bypass") || config.isPlayerWhitelisted(player);
+                    for (String channel : new TreeSet<>(listener.getAllRegisteredChannels().getOrDefault(player.getUniqueId(), Set.of()))) {
+                        boolean before = config.shouldBlock(channel);
+                        boolean after = config.previewBlocked(channel, pattern);
+                        if (before == after) continue;
+                        boolean kick = after && config.isKick() && config.getAction(channel) == ModFilterConfig.Action.KICK
+                                && !exempt && !listener.isExcepted(player, channel);
+                        rows.add(player.getName() + ": " + channel + "; " + (before ? "BLOCKED" : "ALLOWED")
+                                + " -> " + (after ? "BLOCKED" : "ALLOWED") + "; would kick=" + kick);
+                    }
+                    result.complete(rows);
+                } catch (RuntimeException e) {
+                    result.completeExceptionally(e);
+                }
+            }, () -> result.complete(List.of()));
+            if (task == null) result.complete(List.of());
         }
-        Collections.sort(rows);
-        if (rows.isEmpty()) rows.add("No online channel decisions would change.");
-        page(sender, "Preview adding '" + pattern + "' in " + config.getMode() + " mode; no changes applied", rows, pageArg(args, 1));
+        java.util.concurrent.CompletableFuture.allOf(pending.toArray(java.util.concurrent.CompletableFuture[]::new))
+                .whenComplete((ignored, error) -> {
+                    if (error != null) {
+                        plugin.getLogger().warning("Could not complete rule preview: " + error.getMessage());
+                        reply(sender, () -> say(sender, "Could not complete the preview. Please retry."));
+                        return;
+                    }
+                    List<String> rows = new ArrayList<>();
+                    pending.forEach(result -> rows.addAll(result.join()));
+                    Collections.sort(rows);
+                    if (rows.isEmpty()) rows.add("No online channel decisions would change.");
+                    replyPage(sender, "Preview adding '" + pattern + "' in " + config.getMode() + " mode; no changes applied", rows, requestedPage);
+                });
+    }
+
+    private void replyPage(CommandSender sender, String title, List<String> rows, int requestedPage) {
+        reply(sender, () -> {
+            try { page(sender, title, rows, requestedPage); }
+            catch (IllegalArgumentException e) { say(sender, e.getMessage()); }
+        });
+    }
+
+    private void reply(CommandSender sender, Runnable action) {
+        if (sender instanceof Player player) player.getScheduler().run(plugin, task -> action.run(), null);
+        else Bukkit.getGlobalRegionScheduler().execute(plugin, action);
     }
 
     private void search(CommandSender sender, List<String> args) {
@@ -320,7 +358,7 @@ final class AdminCommands {
                 UUID uuid = resolveExceptionPlayer(args.get(1));
                 exceptions.remove(uuid, args.get(2));
                 Player player = Bukkit.getPlayer(uuid);
-                if (player != null) listener.recheck(player);
+                if (player != null) player.getScheduler().run(plugin, task -> listener.recheck(player), null);
                 say(sender, "Removed exception for " + uuid + " / " + args.get(2) + ".");
             }
             default -> throw new IllegalArgumentException("Exception action must be add, remove, or list.");

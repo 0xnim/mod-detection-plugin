@@ -84,4 +84,40 @@ class ModFilterConfigTest {
         assertTrue(config.getWarnings().stream().anyMatch(w -> w.contains("Invalid action")));
     }
 
+    @Test void whitelistAcceptsNamesAndUuidsAndReloadRemovesOldEntries() {
+        var plugin = mock(ModDetectorPlugin.class);
+        var yaml = new YamlConfiguration();
+        when(plugin.getConfig()).thenReturn(yaml);
+        when(plugin.getLogger()).thenReturn(Logger.getAnonymousLogger());
+        var player = mock(org.bukkit.entity.Player.class);
+        var uuid = java.util.UUID.randomUUID();
+        when(player.getUniqueId()).thenReturn(uuid);
+        when(player.getName()).thenReturn("TestPlayer");
+        var config = new ModFilterConfig(plugin);
+        yaml.set("whitelisted-players", List.of("  TESTPLAYER  ", ""));
+        config.load();
+        assertTrue(config.isPlayerWhitelisted(player));
+        yaml.set("whitelisted-players", List.of(uuid.toString().toUpperCase(java.util.Locale.ROOT)));
+        config.load();
+        assertTrue(config.isPlayerWhitelisted(player));
+        yaml.set("whitelisted-players", List.of());
+        config.load();
+        assertFalse(config.isPlayerWhitelisted(player));
+        when(player.isOp()).thenReturn(true);
+        assertFalse(config.isPlayerWhitelisted(player));
+        yaml.set("whitelist-operators", true);
+        config.load();
+        assertTrue(config.isPlayerWhitelisted(player));
+    }
+    @Test void modDefinitionsRemainStableAcrossReloads() {
+        var config = config("blacklist", List.of("jade"), List.of());
+        var snapshot = config.getKnownMods();
+        var jade = snapshot.get("jade");
+        assertNotNull(jade);
+        assertThrows(UnsupportedOperationException.class, () -> snapshot.clear());
+        assertThrows(UnsupportedOperationException.class, () -> jade.getChannels().clear());
+        config.load();
+        assertSame(jade, snapshot.get("jade"));
+        assertNotSame(jade, config.getKnownMods().get("jade"));
+    }
 }

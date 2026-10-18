@@ -40,18 +40,18 @@ public final class TemporaryExceptions {
 
     private static String key(UUID player, String mod) { return player + "/" + mod.toLowerCase(Locale.ROOT); }
 
-    public boolean allows(UUID player, String mod) {
+    public synchronized boolean allows(UUID player, String mod) {
         if (mod == null) return false;
         Entry entry = entries.get(key(player, mod));
         return entry != null && entry.expires().isAfter(clock.instant());
     }
 
-    public List<Entry> list() {
+    public synchronized List<Entry> list() {
         return entries.values().stream().filter(e -> e.expires().isAfter(clock.instant()))
                 .sorted(Comparator.comparing(e -> key(e.player(), e.mod()))).toList();
     }
 
-    public void grant(UUID player, String mod, long minutes) throws IOException {
+    public synchronized void grant(UUID player, String mod, long minutes) throws IOException {
         if (minutes < 1 || minutes > 525600) throw new IllegalArgumentException("Minutes must be between 1 and 525600.");
         // YAML paths use dots as separators. Restrict exception IDs to a single safe path segment.
         if (!mod.matches("[a-zA-Z0-9_-]+")) throw new IllegalArgumentException("Exception mod IDs must use letters, digits, '_' or '-'.");
@@ -61,13 +61,13 @@ public final class TemporaryExceptions {
         save(updated);
     }
 
-    public void remove(UUID player, String mod) throws IOException {
+    public synchronized void remove(UUID player, String mod) throws IOException {
         var updated = new LinkedHashMap<>(entries);
         updated.remove(key(player, mod));
         save(updated);
     }
 
-    public Set<UUID> expire() {
+    public synchronized Set<UUID> expire() {
         Set<UUID> affected = new HashSet<>();
         entries.values().removeIf(entry -> {
             if (entry.expires().isAfter(clock.instant())) return false;

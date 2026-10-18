@@ -11,7 +11,8 @@ import java.io.File;
 import java.io.IOException;
 import java.io.BufferedWriter;
 import java.nio.file.AtomicMoveNotSupportedException;
-import org.bukkit.scheduler.BukkitTask;
+import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
+import java.util.concurrent.TimeUnit;
 import java.lang.reflect.Type;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
@@ -50,7 +51,7 @@ public class DetectionLogger {
     private final AtomicBoolean pendingDiscoveredChannelsWrite = new AtomicBoolean(false);
 
     private final Object writeLock = new Object();
-    private BukkitTask writeTask;
+    private ScheduledTask writeTask;
 
     public DetectionLogger(ModDetectorPlugin plugin) {
         this.plugin = plugin;
@@ -119,7 +120,8 @@ public class DetectionLogger {
 
     private void startBatchedWriteScheduler() {
         // Flush pending writes every 30 seconds (600 ticks)
-        writeTask = Bukkit.getScheduler().runTaskTimerAsynchronously(plugin, this::flushPendingWrites, 600L, 600L);
+        writeTask = Bukkit.getAsyncScheduler().runAtFixedRate(plugin, task -> flushPendingWrites(),
+                30L, 30L, TimeUnit.SECONDS);
     }
 
     void flushPendingWrites() {

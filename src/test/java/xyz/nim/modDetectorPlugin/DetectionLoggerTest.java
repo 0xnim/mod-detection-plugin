@@ -3,7 +3,7 @@ package xyz.nim.modDetectorPlugin;
 import com.google.gson.Gson;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
-import org.bukkit.scheduler.BukkitScheduler;
+import io.papermc.paper.threadedregions.scheduler.AsyncScheduler;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.io.TempDir;
 import org.mockito.MockedStatic;
@@ -22,6 +22,8 @@ class DetectionLoggerTest {
     Player player;
     DetectionLogger logger;
     MockedStatic<Bukkit> bukkit;
+    AsyncScheduler scheduler;
+    io.papermc.paper.threadedregions.scheduler.ScheduledTask writeTask;
     final Instant start = Instant.parse("2026-01-01T00:00:00Z");
 
     @BeforeEach void setup() {
@@ -37,7 +39,10 @@ class DetectionLoggerTest {
         when(player.getUniqueId()).thenReturn(UUID.randomUUID());
         when(player.getName()).thenReturn("TestPlayer");
         bukkit = mockStatic(Bukkit.class);
-        bukkit.when(Bukkit::getScheduler).thenReturn(mock(BukkitScheduler.class));
+        scheduler = mock(AsyncScheduler.class);
+        writeTask = mock(io.papermc.paper.threadedregions.scheduler.ScheduledTask.class);
+        when(scheduler.runAtFixedRate(eq(plugin), any(), eq(30L), eq(30L), eq(TimeUnit.SECONDS))).thenReturn(writeTask);
+        bukkit.when(Bukkit::getAsyncScheduler).thenReturn(scheduler);
         logger = new DetectionLogger(plugin);
     }
     @AfterEach void cleanup() { bukkit.close(); }
@@ -138,4 +143,11 @@ class DetectionLoggerTest {
         assertTrue(data.observations.isEmpty());
     }
 
+    @Test void shutdownCancelsAsyncWriterAndFlushesPendingSessions() throws Exception {
+        session("A");
+        logger.shutdown();
+        verify(scheduler).runAtFixedRate(eq(plugin), any(), eq(30L), eq(30L), eq(TimeUnit.SECONDS));
+        verify(writeTask).cancel();
+        assertTrue(Files.readString(directory.resolve("detections.json")).contains("TestPlayer"));
+    }
 }

@@ -1,6 +1,6 @@
 # ModDetectorPlugin
 
-A Paper plugin that detects and manages client-side mods through plugin message channels. Server administrators can configure which mods are allowed or blocked, with configurable kicks, admin alerts, and session logging.
+A Paper/Folia plugin that detects and manages client-side mods through plugin message channels. Server administrators can configure which mods are allowed or blocked, with configurable kicks, admin alerts, and session logging.
 
 ## Features
 
@@ -17,11 +17,13 @@ A Paper plugin that detects and manages client-side mods through plugin message 
 - **Temporary Exceptions** - Persistent player/mod exceptions with automatic expiry
 - **Configuration Checks** - Warnings for unknown IDs, duplicate patterns, and conflicting definitions
 - **Discovery Statistics** - First/last observation and distinct player counts per channel
+- **Player Exemptions** - Exempt player UUIDs, names, or operators while retaining channel tracking
+- **Folia Scheduling** - Run kicks and admin notifications on the owning player scheduler
 - **MiniMessage Support** - Customizable kick messages with formatting
 
 ## Requirements
 
-- Paper 1.21.8 (build and test target)
+- Paper or Folia 1.21.8 (Paper API build target)
 - Java 21 or higher
 
 ## Installation
@@ -42,7 +44,7 @@ A Paper plugin that detects and manages client-side mods through plugin message 
 | `/moddetector players [page]` | List online players with detections | `moddetector.admin` |
 | `/moddetector info <name-or-uuid> [page]` | Show current channels and retained history, including offline players | `moddetector.admin` |
 | `/moddetector changes <name-or-uuid> [page]` | Compare current observations with the previous session, or the last two completed sessions for offline players | `moddetector.admin` |
-| `/moddetector explain <online-player> [page]` | Explain channel rules, actions, bypass permission, and exceptions | `moddetector.admin` |
+| `/moddetector explain <online-player> [page]` | Explain channel rules, actions, bypass permission, whitelist status, and exceptions | `moddetector.admin` |
 | `/moddetector preview <pattern> [page]` | Preview adding a channel pattern to the current rule list | `moddetector.admin` |
 | `/moddetector validate [page]` | Show warnings from the last configuration load | `moddetector.admin` |
 | `/moddetector search <mod-or-channel-or-date> <value> [page]` | Search saved player history | `moddetector.admin` |
@@ -88,6 +90,10 @@ blocked-mods:
 
 # Additional custom channel patterns (use * as wildcard)
 custom-patterns: []
+
+# Exempt UUIDs or case-insensitive names from enforcement, but retain tracking
+whitelisted-players: []
+whitelist-operators: false
 
 # Enable debug logging
 debug: false
@@ -157,7 +163,11 @@ Mod identification prefers exact channels, then wildcard patterns with more lite
 Ties use alphabetical pattern and mod ID order. Identification is separate from enforcement:
 `servux:litematics` is named Litematica, but a configured `servux:*` rule still matches it.
 Use `/md explain <player>` to inspect each registered channel and its matching policy rule.
-The output also shows whether kicks are enabled and whether the player has bypass permission.
+The output also shows whether kicks are enabled, whether the player has bypass permission,
+and whether the player is whitelisted. `whitelisted-players` accepts UUIDs or case-insensitive
+names; UUIDs are recommended because names can change. `whitelist-operators` defaults to false.
+All exemptions preserve channel tracking and session history, subject to logging settings.
+Pending kicks recheck exemptions and the `kick` setting before execution.
 Repeated detections of the same mod produce one alert per session.
 
 For observation without kicks or admin alerts, set `kick: false` and `notify-admins: false`.
@@ -253,6 +263,27 @@ and shared libraries can make identification ambiguous. Do not treat this plugin
 
 Use Java 21 to run the included Gradle wrapper. The compiled JAR will be in `build/libs/`.
 Run `./gradlew test` for regression tests. Test JVMs run with AWT headless mode enabled.
+
+The plugin uses Paper's native entity and async schedulers, which also work on Folia.
+Player quit events clean up session state and cancel pending kicks; no global cleanup task
+removes state concurrently with player events. Configuration reads are serialized with reloads.
+Java 21 and the existing API baseline are retained; this change does not certify Minecraft 26.2 support.
+Live integration checks passed on Paper 1.21.8 build 60 and Folia 1.21.8 build 6 with Java 21.
+Scripted protocol clients verified channel registration, kicks, UUID/name/operator/permission
+exemptions, tracking, reloads during activity, pending-kick cancellation, disconnect/reconnect,
+history across shutdown and restart, player-issued admin commands, and timed background writes.
+Additional checks covered rule previews, per-mod log/alert actions, and temporary-exception removal and automatic expiry.
+The Folia checks used two tick threads and confirmed
+that the admin and detected player occupied different regions. Unit tests also cover these
+logic paths with mocked server APIs.
+
+## Contribution credit
+
+Player whitelist loading and identifier normalization were adapted from
+[PR #8](https://github.com/0xnim/mod-detection-plugin/pull/8) by perfectlyOrganized
+(commit `0b99e87c51d1c9a3518999610bb373d80fe322ef`), under this project's GPLv3 license.
+The integration preserves tracking for exempt players and uses native Paper/Folia scheduling.
+The PR's Java 25/API upgrade and FoliaLib dependency were not imported.
 
 ## License
 

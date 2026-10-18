@@ -76,6 +76,13 @@ custom-patterns: []
 # OTHER SETTINGS
 # ============================================
 
+# Exempt these UUIDs or case-insensitive player names from enforcement.
+# Channel tracking and session history remain enabled for exempt players.
+whitelisted-players: []
+
+# Exempt server operators from enforcement (off by default).
+whitelist-operators: false
+
 # Whether to log all incoming plugin messages to console (useful for discovering mod channels)
 debug: false
 

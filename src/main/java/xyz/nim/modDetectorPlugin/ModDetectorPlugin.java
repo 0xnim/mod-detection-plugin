@@ -11,6 +11,7 @@ public final class ModDetectorPlugin extends JavaPlugin {
     private ModMessageListener messageListener;
     private DetectionLogger detectionLogger;
     private TemporaryExceptions temporaryExceptions;
+    private io.papermc.paper.threadedregions.scheduler.ScheduledTask exceptionTask;
 
     @Override
     public void onEnable() {
@@ -32,10 +33,10 @@ public final class ModDetectorPlugin extends JavaPlugin {
         registerPluginChannels();
 
         registerCommands();
-        Bukkit.getScheduler().runTaskTimer(this, () -> {
+        exceptionTask = Bukkit.getGlobalRegionScheduler().runAtFixedRate(this, task -> {
             for (UUID uuid : temporaryExceptions.expire()) {
                 var player = Bukkit.getPlayer(uuid);
-                if (player != null) messageListener.recheck(player);
+                if (player != null) player.getScheduler().run(this, recheck -> messageListener.recheck(player), null);
             }
         }, 20L, 20L);
 
@@ -78,6 +79,8 @@ public final class ModDetectorPlugin extends JavaPlugin {
     @Override
     public void onDisable() {
         getServer().getMessenger().unregisterIncomingPluginChannel(this);
+        if (exceptionTask != null) exceptionTask.cancel();
+        if (messageListener != null) messageListener.shutdown();
         if (detectionLogger != null) detectionLogger.shutdown();
         getLogger().info("ModDetector disabled");
     }

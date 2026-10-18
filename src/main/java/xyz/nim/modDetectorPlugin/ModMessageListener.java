@@ -6,6 +6,7 @@ import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Bukkit;
+import io.papermc.paper.threadedregions.scheduler.ScheduledTask;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -34,41 +35,18 @@ public class ModMessageListener implements Listener, PluginMessageListener {
     private final Map<UUID, Set<String>> kickCandidates = new ConcurrentHashMap<>();
     private final Set<UUID> pendingKicks = ConcurrentHashMap.newKeySet();
 
+    private final Map<UUID, ScheduledTask> kickTasks = new ConcurrentHashMap<>();
+
     public ModMessageListener(ModDetectorPlugin plugin, ModFilterConfig config, DetectionLogger detectionLogger) {
         this.plugin = plugin;
         this.config = config;
         this.detectionLogger = detectionLogger;
-        startCleanupTask();
-    }
-
-    private void startCleanupTask() {
-        // Clean up stale entries every 5 minutes (6000 ticks)
-        Bukkit.getScheduler().runTaskTimer(plugin, this::cleanupStaleEntries, 6000L, 6000L);
-    }
-
-    private void cleanupStaleEntries() {
-        // Clean up entries for players who are no longer online
-        Set<UUID> onlineUuids = ConcurrentHashMap.newKeySet();
-        for (Player player : Bukkit.getOnlinePlayers()) {
-            onlineUuids.add(player.getUniqueId());
-        }
-
-        // Remove tracking data for offline players
-        sessionStartTimes.keySet().removeIf(uuid -> !onlineUuids.contains(uuid));
-        detectedChannels.keySet().removeIf(uuid -> !onlineUuids.contains(uuid));
-        allRegisteredChannels.keySet().removeIf(uuid -> !onlineUuids.contains(uuid));
-        pendingKicks.removeIf(uuid -> !onlineUuids.contains(uuid));
-        kickCandidates.keySet().removeIf(uuid -> !onlineUuids.contains(uuid));
-
-        if (config.isDebug()) {
-            plugin.getLogger().info("[DEBUG] Cleaned up stale tracking entries");
-        }
     }
 
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
-        sessionStartTimes.put(player.getUniqueId(), Instant.now());
+        sessionStartTimes.putIfAbsent(player.getUniqueId(), Instant.now());
         allRegisteredChannels.computeIfAbsent(player.getUniqueId(), k -> ConcurrentHashMap.newKeySet());
     }
 
@@ -83,6 +61,7 @@ public class ModMessageListener implements Listener, PluginMessageListener {
 
         // Always track all channels in memory for /md info command
         UUID uuid = player.getUniqueId();
+        sessionStartTimes.putIfAbsent(uuid, Instant.now());
         Set<String> channels = allRegisteredChannels.computeIfAbsent(uuid, k -> ConcurrentHashMap.newKeySet());
         if (channels.add(channel)) {
             // New channel registered - log to file if log-all-channels is enabled
@@ -95,7 +74,7 @@ public class ModMessageListener implements Listener, PluginMessageListener {
             }
         }
 
-        if (player.hasPermission("moddetector.bypass")) {
+        if (isExempt(player)) {
             return;
         }
 
@@ -110,7 +89,7 @@ public class ModMessageListener implements Listener, PluginMessageListener {
             plugin.getLogger().info("[DEBUG] Received plugin message from " + player.getName() + " on channel: " + channel);
         }
 
-        if (player.hasPermission("moddetector.bypass")) {
+        if (isExempt(player)) {
             return;
         }
 
@@ -124,6 +103,8 @@ public class ModMessageListener implements Listener, PluginMessageListener {
         Player player = event.getPlayer();
         UUID uuid = player.getUniqueId();
 
+        ScheduledTask task = kickTasks.remove(uuid);
+        if (task != null) task.cancel();
         Instant joinTime = sessionStartTimes.remove(uuid);
         Instant leaveTime = Instant.now();
 
@@ -160,7 +141,15 @@ public class ModMessageListener implements Listener, PluginMessageListener {
         kickCandidates.computeIfAbsent(uuid, k -> ConcurrentHashMap.newKeySet()).add(channel);
         if (isExcepted(player, channel)) return;
         if (config.shouldKick(channel) && pendingKicks.add(uuid)) {
-            Bukkit.getScheduler().runTaskLater(plugin, () -> executeKick(player), 20L);
+            Instant session = sessionStartTimes.computeIfAbsent(uuid, key -> Instant.now());
+            ScheduledTask task = player.getScheduler().runDelayed(plugin, scheduled -> {
+                if (session == sessionStartTimes.get(uuid)) {
+                    kickTasks.remove(uuid);
+                    executeKick(player);
+                }
+            }, null, 20L);
+            if (task == null) pendingKicks.remove(uuid);
+            else kickTasks.put(uuid, task);
         }
         String modName = config.getModName(channel);
         Set<String> playerMods = detectedChannels.computeIfAbsent(uuid, k -> ConcurrentHashMap.newKeySet());
@@ -193,7 +182,7 @@ public class ModMessageListener implements Listener, PluginMessageListener {
 
         Set<String> candidates = kickCandidates.getOrDefault(uuid, Set.of());
         Set<String> blockedMods = new java.util.TreeSet<>();
-        if (!player.hasPermission("moddetector.bypass")) {
+        if (!isExempt(player)) {
             for (String channel : candidates) {
                 if (config.shouldKick(channel) && !isExcepted(player, channel)) blockedMods.add(config.getModName(channel));
             }
@@ -252,7 +241,7 @@ public class ModMessageListener implements Listener, PluginMessageListener {
     }
 
     public void recheck(Player player) {
-        if (player.hasPermission("moddetector.bypass")) return;
+        if (isExempt(player)) return;
         Set<String> observed = new java.util.HashSet<>(allRegisteredChannels.getOrDefault(player.getUniqueId(), Set.of()));
         observed.addAll(kickCandidates.getOrDefault(player.getUniqueId(), Set.of()));
         for (String channel : observed) {
@@ -268,6 +257,16 @@ public class ModMessageListener implements Listener, PluginMessageListener {
         return allRegisteredChannels;
     }
 
+    private boolean isExempt(Player player) {
+        return player.hasPermission("moddetector.bypass") || config.isPlayerWhitelisted(player);
+    }
+
+    public void shutdown() {
+        kickTasks.values().forEach(ScheduledTask::cancel);
+        kickTasks.clear();
+        pendingKicks.clear();
+    }
+
     private void notifyAdmins(Player offender, String modName, String channel) {
         Component message = Component.text("[ModDetector] ", NamedTextColor.RED)
                 .append(Component.text(offender.getName(), NamedTextColor.YELLOW))
@@ -276,9 +275,9 @@ public class ModMessageListener implements Listener, PluginMessageListener {
                 .append(Component.text(" (" + channel + ")", NamedTextColor.DARK_GRAY));
 
         for (Player admin : Bukkit.getOnlinePlayers()) {
-            if (admin.hasPermission("moddetector.notify")) {
-                admin.sendMessage(message);
-            }
+            admin.getScheduler().run(plugin, task -> {
+                if (admin.hasPermission("moddetector.notify")) admin.sendMessage(message);
+            }, null);
         }
 
         // Log plain text to console

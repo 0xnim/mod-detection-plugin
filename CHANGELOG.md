@@ -6,6 +6,9 @@ All notable changes to ModDetectorPlugin will be documented in this file.
 
 ### Fixed
 
+- Serialize configuration access during reloads and cancel pending kicks on disconnect and shutdown.
+- Run cross-player permission checks on the target player's scheduler.
+
 - Initialize session history before use and keep logging failures from preventing kicks.
 - Preserve empty full snapshots and create a full baseline for the first completed session.
 - Snapshot mutable records before asynchronous serialization, serialize file writes, and retry failed saves.
@@ -17,6 +20,9 @@ All notable changes to ModDetectorPlugin will be documented in this file.
 - Read-only previews for adding a channel pattern and loaded-configuration validation reports.
 - Per-mod log/alert/kick actions and persistent, expiring UUID/mod exceptions.
 - Complete channel snapshots for new sessions and per-player channel discovery timestamps.
+- Native Paper/Folia scheduling for player kicks, admin notifications, and background log writes.
+- Player exemptions by UUID or name, plus optional operator exemptions, adapted from perfectlyOrganized's PR #8.
+  Exemptions retain channel tracking and history; pending kicks recheck exemptions and the kick setting.
 
 - `/md explain <player>` reports channel policy rules, kick configuration, and bypass status.
 - `history.max-sessions-per-player` retains 100 recent sessions by default; 0 retains all sessions.
