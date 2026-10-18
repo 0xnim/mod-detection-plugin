@@ -57,6 +57,13 @@ blocked-mods:
 # Then add to blocked-mods: my-cheat-client, another-mod
 custom-mods: {}
 
+# Actions for identified mods whose channels are blocked by the rules above.
+# log: console/session logging only; alert: also notify admins; kick: also kick.
+# Unspecified mods use kick. The global kick and notify-admins switches still apply.
+# Actions follow the most specific identified mod, even when a broader rule blocks it.
+# Example: mod-actions: {jade: alert, xaeros-minimap: log}
+mod-actions: {}
+
 # Additional custom channel patterns to block (simple mode)
 # Use * as wildcard (e.g., "someclient:*" matches any channel starting with "someclient:")
 # These are checked IN ADDITION to blocked-mods above

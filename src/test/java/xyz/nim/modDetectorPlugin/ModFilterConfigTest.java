@@ -39,4 +39,49 @@ class ModFilterConfigTest {
         assertFalse(config.shouldBlock("example:axb1rest"));
         assertFalse(config.shouldBlock("example:a.b"));
     }
+    @Test void previewAddsPatternWithoutChangingLoadedRulesInEitherMode() {
+        var blacklist = config("blacklist", List.of("jade"), List.of());
+        assertTrue(blacklist.previewBlocked("new:main", "new:*"));
+        assertFalse(blacklist.shouldBlock("new:main"));
+        assertTrue(blacklist.previewBlocked("jade:main", "new:*"));
+        var whitelist = config("whitelist", List.of("jade"), List.of());
+        assertFalse(whitelist.previewBlocked("new:main", "new:*"));
+        assertTrue(whitelist.shouldBlock("new:main"));
+        assertFalse(whitelist.previewBlocked("jade:main", "new:*"));
+    }
+    @Test void actionsRespectMasterSwitchesAndValidationReportsBadRules() {
+        var plugin = mock(ModDetectorPlugin.class);
+        var yaml = new YamlConfiguration();
+        yaml.set("mode", "blacklist");
+        yaml.set("blocked-mods", List.of("jade", "missing"));
+        yaml.set("custom-patterns", List.of("jade:*"));
+        yaml.set("mod-actions.jade", "log");
+        yaml.set("mod-actions.missing", "kick");
+        when(plugin.getConfig()).thenReturn(yaml);
+        when(plugin.getLogger()).thenReturn(Logger.getAnonymousLogger());
+        when(plugin.getResource("mods.yml")).thenAnswer(i -> getClass().getResourceAsStream("/mods.yml"));
+        var config = new ModFilterConfig(plugin);
+        config.load();
+        assertTrue(config.shouldBlock("jade:main"));
+        assertFalse(config.shouldKick("jade:main"));
+        assertFalse(config.shouldAlert("jade:main"));
+        assertTrue(config.getWarnings().stream().anyMatch(w -> w.contains("Unknown mod ID")));
+        assertTrue(config.getWarnings().stream().anyMatch(w -> w.contains("Duplicate filter pattern")));
+        yaml.set("mod-actions.jade", "alert");
+        config.load();
+        assertTrue(config.shouldAlert("jade:main"));
+        assertFalse(config.shouldKick("jade:main"));
+        yaml.set("mod-actions.jade", "kick");
+        config.load();
+        assertTrue(config.shouldKick("jade:main"));
+        yaml.set("kick", false);
+        yaml.set("notify-admins", false);
+        config.load();
+        assertFalse(config.shouldKick("jade:main"));
+        assertFalse(config.shouldAlert("jade:main"));
+        yaml.set("mod-actions.jade", "invalid");
+        config.load();
+        assertTrue(config.getWarnings().stream().anyMatch(w -> w.contains("Invalid action")));
+    }
+
 }

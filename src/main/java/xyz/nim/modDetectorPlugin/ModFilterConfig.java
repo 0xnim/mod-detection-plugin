@@ -16,6 +16,10 @@ import java.util.regex.Pattern;
 
 public class ModFilterConfig {
 
+    public enum Action { LOG, ALERT, KICK }
+    private final Map<String, Action> actions = new LinkedHashMap<>();
+    private final List<String> warnings = new ArrayList<>();
+
     public enum Mode {
         WHITELIST,
         BLACKLIST
@@ -69,6 +73,8 @@ public class ModFilterConfig {
     }
 
     public void load() {
+        warnings.clear();
+        actions.clear();
         loadKnownMods();
 
         plugin.saveDefaultConfig();
@@ -76,6 +82,9 @@ public class ModFilterConfig {
         FileConfiguration config = plugin.getConfig();
 
         String modeStr = config.getString("mode", "blacklist").toUpperCase(Locale.ROOT);
+        if (!modeStr.equals("WHITELIST") && !modeStr.equals("BLACKLIST")) {
+            warnings.add("Invalid mode: " + modeStr + "; using blacklist.");
+        }
         this.mode = modeStr.equals("WHITELIST") ? Mode.WHITELIST : Mode.BLACKLIST;
 
         this.kick = config.getBoolean("kick", true);
@@ -126,7 +135,7 @@ public class ModFilterConfig {
                 }
                 plugin.getLogger().info("Loaded mod: " + mod.getName() + " (" + mod.getChannels().size() + " channels)");
             } else {
-                plugin.getLogger().warning("Unknown mod ID in config: " + modId);
+                warnings.add("Unknown mod ID in blocked-mods: " + modId);
             }
         }
 
@@ -137,6 +146,42 @@ public class ModFilterConfig {
             filterRules.add(new Rule(patternStr, pattern, "custom-patterns", patternStr));
         }
 
+        ConfigurationSection actionSection = config.getConfigurationSection("mod-actions");
+        if (actionSection != null) {
+            for (String id : actionSection.getKeys(false)) {
+                String key = id.toLowerCase(Locale.ROOT);
+                if (!knownMods.containsKey(key) && !customMods.containsKey(key)) {
+                    warnings.add("Unknown mod ID in mod-actions: " + id);
+                    continue;
+                }
+                try {
+                    actions.put(key, Action.valueOf(actionSection.getString(id, "").toUpperCase(Locale.ROOT)));
+                } catch (IllegalArgumentException e) {
+                    warnings.add("Invalid action for " + id + ": use log, alert, or kick.");
+                }
+            }
+        }
+        java.util.Set<String> seenPatterns = new java.util.HashSet<>();
+        for (Rule rule : filterRules) {
+            if (rule.glob().isBlank()) warnings.add("Empty channel pattern in " + rule.modId());
+            if (!seenPatterns.add(rule.glob().toLowerCase(Locale.ROOT))) {
+                warnings.add("Duplicate filter pattern: " + rule.glob());
+            }
+        }
+        Map<String, String> owners = new LinkedHashMap<>();
+        for (Rule rule : identificationRules) {
+            String previous = owners.putIfAbsent(rule.glob().toLowerCase(Locale.ROOT), rule.modId());
+            if (previous != null && !previous.equals(rule.modId())) {
+                warnings.add("Shared identification pattern " + rule.glob() + ": " + previous + ", " + rule.modId());
+            }
+        }
+        for (String id : customMods.keySet()) {
+            if (knownMods.containsKey(id)) warnings.add("Custom mod ID conflicts with built-in ID: " + id);
+        }
+        if (config.getInt("history.max-sessions-per-player", 100) < 0) {
+            warnings.add("Negative history retention becomes unlimited (0).");
+        }
+        warnings.forEach(plugin.getLogger()::warning);
         identificationRules.sort(RULE_ORDER);
         filterRules.sort(RULE_ORDER);
         plugin.getLogger().info("Loaded " + patterns.size() + " channel patterns in " + mode + " mode");
@@ -159,7 +204,7 @@ public class ModFilterConfig {
             List<String> channels = modSection.getStringList("channels");
 
             if (channels.isEmpty()) {
-                plugin.getLogger().warning("Custom mod '" + modId + "' has no channels defined, skipping");
+                warnings.add("Custom mod '" + modId + "' has no channels defined, skipping");
                 continue;
             }
 
@@ -206,7 +251,7 @@ public class ModFilterConfig {
         }
     }
 
-    private Pattern wildcardToRegex(String wildcard) {
+    static Pattern wildcardToRegex(String wildcard) {
         StringBuilder regex = new StringBuilder("^");
         for (char c : wildcard.toCharArray()) {
             switch (c) {
@@ -231,6 +276,35 @@ public class ModFilterConfig {
         return Pattern.compile(regex.toString(), Pattern.CASE_INSENSITIVE);
     }
 
+    public List<String> getWarnings() { return List.copyOf(warnings); }
+
+    public String getModId(String channel) {
+        return identificationRules.stream().filter(r -> r.pattern().matcher(channel).matches())
+                .map(Rule::modId).map(id -> id.toLowerCase(Locale.ROOT)).findFirst().orElse(null);
+    }
+
+    public boolean hasMod(String id) {
+        return knownMods.containsKey(id.toLowerCase(Locale.ROOT)) || customMods.containsKey(id.toLowerCase(Locale.ROOT));
+    }
+
+    public Action getAction(String channel) {
+        return actions.getOrDefault(getModId(channel), Action.KICK);
+    }
+
+    public boolean shouldKick(String channel) {
+        return shouldBlock(channel) && kick && getAction(channel) == Action.KICK;
+    }
+
+    public boolean shouldAlert(String channel) {
+        return shouldBlock(channel) && notifyAdmins && getAction(channel) != Action.LOG;
+    }
+
+    // Preview adding one pattern to the existing allow/block list without changing configuration.
+    public boolean previewBlocked(String channel, String pattern) {
+        boolean matched = matchesPattern(channel) || wildcardToRegex(pattern).matcher(channel).matches();
+        return mode == Mode.BLACKLIST ? matched : !matched;
+    }
+
     public boolean matchesPattern(String channel) {
         for (Pattern pattern : patterns) {
             if (pattern.matcher(channel).matches()) {
@@ -252,7 +326,8 @@ public class ModFilterConfig {
         String reason = matched == null ? "no configured rule matched"
                 : "rule " + matched.modId() + " (" + matched.glob() + ")";
         return channel + " -> " + getModName(channel) + ": "
-                + (shouldBlock(channel) ? "BLOCKED" : "ALLOWED") + " in " + mode + "; " + reason;
+                + (shouldBlock(channel) ? "BLOCKED" : "ALLOWED") + " in " + mode + "; " + reason
+                + "; action=" + getAction(channel) + "; effective kick=" + shouldKick(channel);
     }
 
     public int getMaxSessionsPerPlayer() {

@@ -11,6 +11,12 @@ A Paper plugin that detects and manages client-side mods through plugin message 
 - **Custom Patterns** - Add your own channel patterns with wildcard support
 - **Admin Notifications** - Real-time alerts when mods are detected
 - **Detection Logging** - Track all detections to a file for review
+- **History Tools** - Offline lookups, session comparisons, and paginated searches
+- **Rule Preview** - Preview an added channel pattern against online players without applying it
+- **Per-Mod Actions** - Log, alert, or kick for each identified mod
+- **Temporary Exceptions** - Persistent player/mod exceptions with automatic expiry
+- **Configuration Checks** - Warnings for unknown IDs, duplicate patterns, and conflicting definitions
+- **Discovery Statistics** - First/last observation and distinct player counts per channel
 - **MiniMessage Support** - Customizable kick messages with formatting
 
 ## Requirements
@@ -32,11 +38,18 @@ A Paper plugin that detects and manages client-side mods through plugin message 
 | `/moddetector` | Show help | `moddetector.admin` |
 | `/moddetector reload` | Reload configuration | `moddetector.admin` |
 | `/moddetector status` | Show current status | `moddetector.admin` |
-| `/moddetector mods` | List known mod definitions | `moddetector.admin` |
-| `/moddetector players` | List online players with detections | `moddetector.admin` |
-| `/moddetector info <player>` | Show current channels and retained history | `moddetector.admin` |
-| `/moddetector explain <player>` | Explain current channel rules, kick setting, and bypass permission | `moddetector.admin` |
-| `/moddetector discovered` | List channels recorded with log-all-channels | `moddetector.admin` |
+| `/moddetector mods [page]` | List known and custom mod definitions | `moddetector.admin` |
+| `/moddetector players [page]` | List online players with detections | `moddetector.admin` |
+| `/moddetector info <name-or-uuid> [page]` | Show current channels and retained history, including offline players | `moddetector.admin` |
+| `/moddetector changes <name-or-uuid> [page]` | Compare current observations with the previous session, or the last two completed sessions for offline players | `moddetector.admin` |
+| `/moddetector explain <online-player> [page]` | Explain channel rules, actions, bypass permission, and exceptions | `moddetector.admin` |
+| `/moddetector preview <pattern> [page]` | Preview adding a channel pattern to the current rule list | `moddetector.admin` |
+| `/moddetector validate [page]` | Show warnings from the last configuration load | `moddetector.admin` |
+| `/moddetector search <mod-or-channel-or-date> <value> [page]` | Search saved player history | `moddetector.admin` |
+| `/moddetector discovered [page]` | Show discovered channels and observation statistics | `moddetector.admin` |
+| `/moddetector exception add <name-or-uuid> <mod-id> <minutes>` | Grant a temporary exception | `moddetector.admin` |
+| `/moddetector exception remove <name-or-uuid> <mod-id>` | Remove an exception and recheck an online player | `moddetector.admin` |
+| `/moddetector exception list [page]` | List active exceptions | `moddetector.admin` |
 | `/moddetector debug` | Show debug status | `moddetector.admin` |
 
 **Alias:** `/md`
@@ -113,10 +126,11 @@ The following mod IDs are pre-configured in `mods.yml`:
 
 ## Detection Logging
 
-When `track-detections: true`, completed sessions with registered channels are stored in
+When `track-detections: true`, completed sessions, including sessions without registered channels, are stored in
 `plugins/ModDetectorPlugin/detections.json`. Despite its filename, this file uses JSON Lines:
 one player record per line. Records include UUID, name, lifetime totals, aggregate mods and
 channels, and retained sessions. Session records use full snapshots or added/removed deltas.
+New sessions also contain `registeredChannels`, the complete set observed during the session.
 An empty full snapshot means no known mods; missing snapshot and delta fields mean unchanged.
 
 Writes are batched every 30 seconds and flushed on shutdown. Failed writes are retried.
@@ -148,6 +162,82 @@ Repeated detections of the same mod produce one alert per session.
 
 For observation without kicks or admin alerts, set `kick: false` and `notify-admins: false`.
 Console detection messages remain enabled.
+
+## History and administration examples
+
+```text
+/md info OfflinePlayer 2
+/md changes OfflinePlayer
+/md search mod jade
+/md search mod "Simple Voice Chat"
+/md search channel servux:
+/md search date 2026-10-17
+/md preview jade:*
+/md validate
+/md exception add PlayerName jade 60
+/md exception list
+/md exception remove PlayerName jade
+```
+
+Lists contain eight results per page. Player names match online players first, then the latest
+saved name. Ambiguous saved names require a UUID. Lookups do not contact an external profile
+service. Exception commands also accept UUIDs without existing history.
+
+Mod and channel searches use case-insensitive substrings. Mod searches also accept a configured
+mod ID. Date searches use `YYYY-MM-DD` in UTC and match retained sessions overlapping that date.
+Mod searches include lifetime aggregates; channel searches include retained complete snapshots,
+unknown-channel aggregates, and discovery observations. Older records may lack known channel IDs.
+Date searches and offline comparisons are limited by session retention.
+
+`changes` reports observed mods and channels, not verified installation changes. A live session
+can register more channels later. Legacy sessions have no complete channel snapshot, so channel
+comparisons explicitly report unavailable data. New sessions with zero channels permit comparisons
+after a player stops registering all previously observed channels.
+
+`preview` simulates adding one pattern to `custom-patterns`. In blacklist mode, this can block
+additional channels. In whitelist mode, this can allow additional channels. Results show changed
+online channel decisions and whether the proposed decision would kick each player, including
+per-mod actions, global switches, bypass permissions, and temporary exceptions. It does not edit
+configuration or act on players. Apply a chosen pattern in `config.yml`, then use `/md reload`.
+
+`validate` reports warnings from the loaded configuration. Reload after editing. Checks include
+unknown IDs, invalid actions or mode, negative retention, empty or duplicate filter patterns,
+empty custom definitions, custom IDs colliding with built-ins, and identical identification
+patterns assigned to different mods. It does not prove that arbitrary wildcard patterns are disjoint.
+
+## Actions and temporary exceptions
+
+```yaml
+mod-actions:
+  jade: alert
+  xaeros-minimap: log
+  journeymap: kick
+```
+
+Actions apply only when the existing whitelist/blacklist rules block a channel. An unspecified
+action defaults to `kick`, preserving existing behavior. `log` keeps console/session logging;
+`alert` also notifies administrators; `kick` also schedules a kick. `kick: false` disables all
+kicks, and `notify-admins: false` disables all alerts. Session persistence still depends on
+`track-detections`. Actions follow the identified mod: a broad `servux:*` blocking rule can still
+use the `litematica` action for `servux:litematics`.
+
+Exceptions use the identified mod ID and player UUID. They suppress blocking alerts and kicks
+for that pair while preserving session history and optional channel discovery. They cannot cover
+unidentified channels. Durations range from 1 to 525600 minutes. Exception mod IDs accept letters,
+digits, hyphens, and underscores. Changes are saved atomically to `exceptions.yml` before success
+is reported. Exceptions survive restarts; expiry uses UTC time and online players are rechecked
+every 20 server ticks. Removing an exception also rechecks the player. Pending kicks recheck
+current rules, permissions, actions, and exceptions before execution. Invalid exception files
+disable the plugin with a console error instead of silently discarding saved exceptions.
+
+## Discovery statistics
+
+With `log-all-channels: true`, registrations record per-player first/last observation timestamps
+in `detections.json`. `/md discovered` aggregates those timestamps and distinct player counts.
+The counts start when statistics are first recorded; existing discovery lists cannot recover
+old timestamps or player counts. Session retention does not remove observation statistics.
+The existing `discovered-channels.json` array remains compatible. Statistics use the same batched
+save and retry mechanism as player history.
 
 ## How It Works
 

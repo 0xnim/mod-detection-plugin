@@ -13,12 +13,20 @@ All notable changes to ModDetectorPlugin will be documented in this file.
 
 ### Added
 
+- Offline history queries, paginated output, session comparisons, and history searches by mod, channel, or UTC date.
+- Read-only previews for adding a channel pattern and loaded-configuration validation reports.
+- Per-mod log/alert/kick actions and persistent, expiring UUID/mod exceptions.
+- Complete channel snapshots for new sessions and per-player channel discovery timestamps.
+
 - `/md explain <player>` reports channel policy rules, kick configuration, and bypass status.
 - `history.max-sessions-per-player` retains 100 recent sessions by default; 0 retains all sessions.
   Retention preserves lifetime totals and rebases the first retained session into a full snapshot.
 - Regression tests and a Java 21 build workflow.
 
 ### Changed
+
+- Record completed sessions with no registered channels so comparisons can show all channels disappearing.
+- Recheck rules, actions, bypass permission, and temporary exceptions before a delayed kick.
 
 - Document current commands, configuration, JSON Lines storage, retention, and detection limitations.
 

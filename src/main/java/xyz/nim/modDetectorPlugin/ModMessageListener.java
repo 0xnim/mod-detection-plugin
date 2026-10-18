@@ -31,6 +31,7 @@ public class ModMessageListener implements Listener, PluginMessageListener {
     private final Map<UUID, Set<String>> detectedChannels = new ConcurrentHashMap<>();
     private final Map<UUID, Set<String>> allRegisteredChannels = new ConcurrentHashMap<>();
     private final Map<UUID, Instant> sessionStartTimes = new ConcurrentHashMap<>();
+    private final Map<UUID, Set<String>> kickCandidates = new ConcurrentHashMap<>();
     private final Set<UUID> pendingKicks = ConcurrentHashMap.newKeySet();
 
     public ModMessageListener(ModDetectorPlugin plugin, ModFilterConfig config, DetectionLogger detectionLogger) {
@@ -57,6 +58,7 @@ public class ModMessageListener implements Listener, PluginMessageListener {
         detectedChannels.keySet().removeIf(uuid -> !onlineUuids.contains(uuid));
         allRegisteredChannels.keySet().removeIf(uuid -> !onlineUuids.contains(uuid));
         pendingKicks.removeIf(uuid -> !onlineUuids.contains(uuid));
+        kickCandidates.keySet().removeIf(uuid -> !onlineUuids.contains(uuid));
 
         if (config.isDebug()) {
             plugin.getLogger().info("[DEBUG] Cleaned up stale tracking entries");
@@ -67,6 +69,7 @@ public class ModMessageListener implements Listener, PluginMessageListener {
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
         sessionStartTimes.put(player.getUniqueId(), Instant.now());
+        allRegisteredChannels.computeIfAbsent(player.getUniqueId(), k -> ConcurrentHashMap.newKeySet());
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
@@ -128,9 +131,10 @@ public class ModMessageListener implements Listener, PluginMessageListener {
         Set<String> channels = allRegisteredChannels.remove(uuid);
         detectedChannels.remove(uuid);
         pendingKicks.remove(uuid);
+        kickCandidates.remove(uuid);
 
         // Log session with all mods and channels
-        if (channels != null && !channels.isEmpty()) {
+        if (channels != null) {
             // Resolve channels into known mods and unknown channels
             Set<String> sessionMods = new java.util.LinkedHashSet<>();
             Set<String> sessionUnknownChannels = new java.util.LinkedHashSet<>();
@@ -146,13 +150,18 @@ public class ModMessageListener implements Listener, PluginMessageListener {
                 }
             }
 
-            logSession(player, sessionMods, sessionUnknownChannels, joinTime, leaveTime);
+            logSession(player, sessionMods, sessionUnknownChannels, channels, joinTime, leaveTime);
         }
     }
 
     private void handleBlockedChannel(Player player, String channel) {
         UUID uuid = player.getUniqueId();
 
+        kickCandidates.computeIfAbsent(uuid, k -> ConcurrentHashMap.newKeySet()).add(channel);
+        if (isExcepted(player, channel)) return;
+        if (config.shouldKick(channel) && pendingKicks.add(uuid)) {
+            Bukkit.getScheduler().runTaskLater(plugin, () -> executeKick(player), 20L);
+        }
         String modName = config.getModName(channel);
         Set<String> playerMods = detectedChannels.computeIfAbsent(uuid, k -> ConcurrentHashMap.newKeySet());
         boolean isNewDetection = playerMods.add(modName);
@@ -163,16 +172,10 @@ public class ModMessageListener implements Listener, PluginMessageListener {
         String logMessage = config.formatLogMessage(player.getName(), channel);
         plugin.getLogger().warning(logMessage);
 
-        if (config.isNotifyAdmins()) {
+        if (config.shouldAlert(channel)) {
             notifyAdmins(player, modName, channel);
         }
 
-        if (config.isKick()) {
-            // Schedule kick with batching
-            if (pendingKicks.add(uuid)) {
-                Bukkit.getScheduler().runTaskLater(plugin, () -> executeKick(player), 20L);
-            }
-        }
         // Note: Session logging now happens on quit via onPlayerQuit
     }
 
@@ -184,11 +187,18 @@ public class ModMessageListener implements Listener, PluginMessageListener {
             detectedChannels.remove(uuid);
             sessionStartTimes.remove(uuid);
             allRegisteredChannels.remove(uuid);
+            kickCandidates.remove(uuid);
             return;
         }
 
-        Set<String> blockedMods = detectedChannels.remove(uuid);
-        if (blockedMods == null || blockedMods.isEmpty()) {
+        Set<String> candidates = kickCandidates.getOrDefault(uuid, Set.of());
+        Set<String> blockedMods = new java.util.TreeSet<>();
+        if (!player.hasPermission("moddetector.bypass")) {
+            for (String channel : candidates) {
+                if (config.shouldKick(channel) && !isExcepted(player, channel)) blockedMods.add(config.getModName(channel));
+            }
+        }
+        if (blockedMods.isEmpty()) {
             return;
         }
 
@@ -214,7 +224,9 @@ public class ModMessageListener implements Listener, PluginMessageListener {
             sessionMods.addAll(blockedMods);
         }
 
-        logSession(player, sessionMods, sessionUnknownChannels, joinTime, kickTime);
+        kickCandidates.remove(uuid);
+        logSession(player, sessionMods, sessionUnknownChannels,
+                allChannels == null ? Set.of() : allChannels, joinTime, kickTime);
 
         String modList = String.join(", ", blockedMods);
         Component kickComponent = miniMessage.deserialize(
@@ -225,12 +237,26 @@ public class ModMessageListener implements Listener, PluginMessageListener {
         player.kick(kickComponent);
     }
 
-    private void logSession(Player player, Set<String> mods, Set<String> channels, Instant join, Instant leave) {
+    private void logSession(Player player, Set<String> mods, Set<String> channels, Set<String> registered, Instant join, Instant leave) {
         try {
-            detectionLogger.logDetection(player, mods, channels, join, leave);
+            detectionLogger.logSession(player, mods, channels, registered, join, leave);
         } catch (RuntimeException e) {
             plugin.getLogger().log(java.util.logging.Level.WARNING,
                     "Failed to log session for " + player.getName(), e);
+        }
+    }
+
+    public boolean isExcepted(Player player, String channel) {
+        return plugin.getTemporaryExceptions() != null
+                && plugin.getTemporaryExceptions().allows(player.getUniqueId(), config.getModId(channel));
+    }
+
+    public void recheck(Player player) {
+        if (player.hasPermission("moddetector.bypass")) return;
+        Set<String> observed = new java.util.HashSet<>(allRegisteredChannels.getOrDefault(player.getUniqueId(), Set.of()));
+        observed.addAll(kickCandidates.getOrDefault(player.getUniqueId(), Set.of()));
+        for (String channel : observed) {
+            if (config.shouldBlock(channel)) handleBlockedChannel(player, channel);
         }
     }
 

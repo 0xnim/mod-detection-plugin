@@ -113,4 +113,29 @@ class DetectionLoggerTest {
         session("A");
         assertEquals(Set.of("A"), DetectionLogger.getModsForSession(logger.getPlayerData(player.getUniqueId()).sessions, 0));
     }
+    @Test void completeChannelsAndDiscoveryStatisticsSurviveRestartAndRetention() {
+        when(config.getMaxSessionsPerPlayer()).thenReturn(1);
+        when(config.getModName("jade:main")).thenReturn("Jade");
+        logger.logChannelRegistration(player, "jade:main", start);
+        logger.logSession(player, Set.of("Jade"), Set.of(), Set.of("jade:main"), start, start.plusSeconds(10));
+        logger.logSession(player, Set.of(), Set.of(), Set.of(), start.plusSeconds(20), start.plusSeconds(30));
+        logger.shutdown();
+        logger = new DetectionLogger(plugin);
+        var data = logger.getPlayerData(player.getUniqueId());
+        assertEquals(Set.of(), data.sessions.getFirst().registeredChannels);
+        assertEquals(Set.of(), DetectionLogger.getModsForSession(data.sessions, 0));
+        assertEquals(2, data.sessionCount);
+        assertNotNull(data.observations.get("jade:main").firstSeen);
+        assertNotNull(data.observations.get("jade:main").lastSeen);
+        data.observations.get("jade:main").firstSeen = "modified";
+        assertNotEquals("modified", logger.getPlayerData(player.getUniqueId()).observations.get("jade:main").firstSeen);
+        assertTrue(logger.getDiscoveredChannels().contains("jade:main"));
+    }
+    @Test void oldRecordsHaveUnknownCompleteChannelsAndNoInventedDiscoveryDates() {
+        session("A");
+        var data = logger.getPlayerData(player.getUniqueId());
+        assertNull(data.sessions.getFirst().registeredChannels);
+        assertTrue(data.observations.isEmpty());
+    }
+
 }

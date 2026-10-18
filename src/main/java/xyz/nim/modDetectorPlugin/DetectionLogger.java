@@ -177,6 +177,9 @@ public class DetectionLogger {
             data.channels.add(channel);
         }
 
+        ChannelObservation observation = data.observations.computeIfAbsent(channel,
+                key -> new ChannelObservation(data.lastSeen, data.lastSeen));
+        observation.lastSeen = data.lastSeen;
         boolean isNewChannel = discoveredChannels.add(channel);
 
         // Mark for batched write instead of immediate write
@@ -184,6 +187,19 @@ public class DetectionLogger {
         if (isNewChannel) {
             pendingDiscoveredChannelsWrite.set(true);
         }
+    }
+
+    public synchronized List<PlayerChannelData> getPlayers() {
+        return playerDataCache.values().stream().map(DetectionLogger::copy)
+                .sorted(java.util.Comparator.comparing(d -> d.uuid.toString())).toList();
+    }
+
+    public synchronized void logSession(Player player, Set<String> mods, Set<String> unknownChannels,
+                                        Set<String> registeredChannels, Instant join, Instant leave) {
+        logDetection(player, mods, unknownChannels, join, leave);
+        if (!plugin.getModFilterConfig().isTrackDetections()) return;
+        PlayerChannelData data = playerDataCache.get(player.getUniqueId());
+        data.sessions.getLast().registeredChannels = new LinkedHashSet<>(registeredChannels);
     }
 
     private static final int DELTA_THRESHOLD = 3; // Use delta if changes < this, otherwise full
@@ -348,6 +364,7 @@ public class DetectionLogger {
     }
 
     private static void normalize(PlayerChannelData data) {
+        if (data.observations == null) data.observations = new java.util.LinkedHashMap<>();
         if (data.sessions == null) data.sessions = new ArrayList<>();
         if (data.mods == null) data.mods = new LinkedHashSet<>();
         if (data.channels == null) data.channels = new LinkedHashSet<>();
@@ -359,6 +376,8 @@ public class DetectionLogger {
 
     private static PlayerChannelData copy(PlayerChannelData data) {
         PlayerChannelData result = new PlayerChannelData(data.uuid, data.username);
+        data.observations.forEach((channel, observation) -> result.observations.put(channel,
+                new ChannelObservation(observation.firstSeen, observation.lastSeen)));
         result.mods = copySet(data.mods);
         result.channels = copySet(data.channels);
         result.firstSeen = data.firstSeen;
@@ -374,6 +393,7 @@ public class DetectionLogger {
             r.added = copySet(session.added);
             r.removed = copySet(session.removed);
             r.channels = copySet(session.channels);
+            r.registeredChannels = copySet(session.registeredChannels);
             result.sessions.add(r);
         }
         return result;
@@ -430,6 +450,8 @@ public class DetectionLogger {
         public Set<String> removed;
         // Channels (unknown) - always stored in full since they're typically few
         public Set<String> channels;
+        // Null identifies legacy records without a complete channel snapshot.
+        public Set<String> registeredChannels;
 
         public SessionRecord() {}
 
@@ -477,8 +499,18 @@ public class DetectionLogger {
         }
     }
 
+    public static class ChannelObservation {
+        public String firstSeen;
+        public String lastSeen;
+        public ChannelObservation(String firstSeen, String lastSeen) {
+            this.firstSeen = firstSeen;
+            this.lastSeen = lastSeen;
+        }
+    }
+
     // POJO for player channel data
     public static class PlayerChannelData {
+        public Map<String, ChannelObservation> observations = new java.util.LinkedHashMap<>();
         public UUID uuid;
         public String username;
         public Set<String> channels = new LinkedHashSet<>();  // For log-all-channels mode
