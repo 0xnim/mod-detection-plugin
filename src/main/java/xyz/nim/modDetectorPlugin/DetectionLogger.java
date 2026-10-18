@@ -8,9 +8,10 @@ import org.bukkit.entity.Player;
 
 import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileReader;
 import java.io.IOException;
-import java.io.PrintWriter;
+import java.io.BufferedWriter;
+import java.nio.file.AtomicMoveNotSupportedException;
+import org.bukkit.scheduler.BukkitTask;
 import java.lang.reflect.Type;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
@@ -48,12 +49,16 @@ public class DetectionLogger {
     private final AtomicBoolean pendingPlayerDataWrite = new AtomicBoolean(false);
     private final AtomicBoolean pendingDiscoveredChannelsWrite = new AtomicBoolean(false);
 
+    private final Object writeLock = new Object();
+    private BukkitTask writeTask;
+
     public DetectionLogger(ModDetectorPlugin plugin) {
         this.plugin = plugin;
         this.logFile = new File(plugin.getDataFolder(), "detections.json");
         this.discoveredChannelsFile = new File(plugin.getDataFolder(), "discovered-channels.json");
         ensureFilesExist();
         loadExistingData();
+        applyRetention();
         startBatchedWriteScheduler();
     }
 
@@ -91,7 +96,7 @@ public class DetectionLogger {
 
         // Load player data (JSON lines format)
         if (logFile.exists() && logFile.length() > 0) {
-            try (BufferedReader reader = new BufferedReader(new FileReader(logFile))) {
+            try (BufferedReader reader = Files.newBufferedReader(logFile.toPath())) {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     line = line.trim();
@@ -99,6 +104,7 @@ public class DetectionLogger {
                     try {
                         PlayerChannelData data = GSON.fromJson(line, PlayerChannelData.class);
                         if (data != null && data.uuid != null) {
+                            normalize(data);
                             playerDataCache.put(data.uuid, data);
                         }
                     } catch (Exception e) {
@@ -113,19 +119,41 @@ public class DetectionLogger {
 
     private void startBatchedWriteScheduler() {
         // Flush pending writes every 30 seconds (600 ticks)
-        Bukkit.getScheduler().runTaskTimerAsynchronously(plugin, this::flushPendingWrites, 600L, 600L);
+        writeTask = Bukkit.getScheduler().runTaskTimerAsynchronously(plugin, this::flushPendingWrites, 600L, 600L);
     }
 
-    private void flushPendingWrites() {
-        if (pendingPlayerDataWrite.compareAndSet(true, false)) {
-            writePlayerDataAtomic();
-        }
-        if (pendingDiscoveredChannelsWrite.compareAndSet(true, false)) {
-            writeDiscoveredChannelsAtomic();
+    void flushPendingWrites() {
+        synchronized (writeLock) {
+            List<PlayerChannelData> players = null;
+            Set<String> channels = null;
+            synchronized (this) {
+                if (pendingPlayerDataWrite.getAndSet(false)) {
+                    players = playerDataCache.values().stream().map(DetectionLogger::copy).toList();
+                }
+                if (pendingDiscoveredChannelsWrite.getAndSet(false)) {
+                    channels = new LinkedHashSet<>(discoveredChannels);
+                }
+            }
+            if (players != null) {
+                try {
+                    writeAtomic(logFile, players.stream().map(GSON::toJson).toList());
+                } catch (IOException | RuntimeException e) {
+                    pendingPlayerDataWrite.set(true);
+                    plugin.getLogger().warning("Failed to save player data; will retry: " + e.getMessage());
+                }
+            }
+            if (channels != null) {
+                try {
+                    writeAtomic(discoveredChannelsFile, List.of(GSON.toJson(channels)));
+                } catch (IOException | RuntimeException e) {
+                    pendingDiscoveredChannelsWrite.set(true);
+                    plugin.getLogger().warning("Failed to save discovered channels; will retry: " + e.getMessage());
+                }
+            }
         }
     }
 
-    public void logChannelRegistration(Player player, String channel, Instant joinTime) {
+    public synchronized void logChannelRegistration(Player player, String channel, Instant joinTime) {
         if (!plugin.getModFilterConfig().isLogAllChannels()) {
             return;
         }
@@ -137,6 +165,7 @@ public class DetectionLogger {
                 k -> new PlayerChannelData(uuid, username));
         data.username = username;
         data.lastSeen = TIMESTAMP_FORMAT.format(Instant.now());
+        if (data.firstSeen == null) data.firstSeen = data.lastSeen;
 
         // Resolve channel to mod name
         String modName = plugin.getModFilterConfig().getModName(channel);
@@ -159,7 +188,7 @@ public class DetectionLogger {
 
     private static final int DELTA_THRESHOLD = 3; // Use delta if changes < this, otherwise full
 
-    public void logDetection(Player player, Set<String> sessionMods, Set<String> sessionChannels, Instant joinTime, Instant leaveTime) {
+    public synchronized void logDetection(Player player, Set<String> sessionMods, Set<String> sessionChannels, Instant joinTime, Instant leaveTime) {
         if (!plugin.getModFilterConfig().isTrackDetections()) {
             return;
         }
@@ -174,7 +203,7 @@ public class DetectionLogger {
         }
 
         String joinTimeStr = joinTime != null ? TIMESTAMP_FORMAT.format(joinTime) : null;
-        String leaveTimeStr = TIMESTAMP_FORMAT.format(leaveTime);
+        String leaveTimeStr = leaveTime != null ? TIMESTAMP_FORMAT.format(leaveTime) : timestamp;
 
         // Normalize nulls to empty sets for comparison
         Set<String> currentMods = sessionMods != null ? sessionMods : new LinkedHashSet<>();
@@ -183,6 +212,8 @@ public class DetectionLogger {
         PlayerChannelData existingData = playerDataCache.get(uuid);
 
         if (existingData != null) {
+            normalize(existingData);
+            if (existingData.firstSeen == null) existingData.firstSeen = timestamp;
             // Get previous session's mods to compute delta
             Set<String> previousMods = getModsForSession(existingData.sessions, existingData.sessions.size() - 1);
 
@@ -196,7 +227,9 @@ public class DetectionLogger {
 
             // Create appropriate session record
             SessionRecord session;
-            if (totalChanges == 0) {
+            if (existingData.sessions.isEmpty()) {
+                session = SessionRecord.full(joinTimeStr, leaveTimeStr, sessionDurationSeconds, currentMods, sessionChannels);
+            } else if (totalChanges == 0) {
                 // No changes - minimal record
                 session = SessionRecord.unchanged(joinTimeStr, leaveTimeStr, sessionDurationSeconds, sessionChannels);
             } else if (totalChanges < DELTA_THRESHOLD) {
@@ -219,9 +252,6 @@ public class DetectionLogger {
                 existingData.channels.addAll(sessionChannels);
             }
 
-            if (existingData.sessions == null) {
-                existingData.sessions = new ArrayList<>();
-            }
             existingData.sessions.add(session);
 
             if (plugin.getModFilterConfig().isDebug()) {
@@ -251,6 +281,7 @@ public class DetectionLogger {
             }
         }
 
+        trimSessions(playerDataCache.get(uuid), plugin.getModFilterConfig().getMaxSessionsPerPlayer());
         // Mark for batched write
         pendingPlayerDataWrite.set(true);
     }
@@ -301,56 +332,79 @@ public class DetectionLogger {
         return mods;
     }
 
-    private void writePlayerDataAtomic() {
-        File tempFile = new File(logFile.getParentFile(), logFile.getName() + ".tmp");
-        try (PrintWriter writer = new PrintWriter(tempFile)) {
-            for (PlayerChannelData data : playerDataCache.values()) {
-                writer.println(GSON.toJson(data));
+    private static void writeAtomic(File target, List<String> lines) throws IOException {
+        var temp = target.toPath().resolveSibling(target.getName() + ".tmp");
+        try (BufferedWriter writer = Files.newBufferedWriter(temp)) {
+            for (String line : lines) {
+                writer.write(line);
+                writer.newLine();
             }
-        } catch (IOException e) {
-            plugin.getLogger().warning("Failed to write player data: " + e.getMessage());
-            return;
         }
-
         try {
-            Files.move(tempFile.toPath(), logFile.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-        } catch (IOException e) {
-            plugin.getLogger().warning("Failed to atomically move player data file: " + e.getMessage());
-            try {
-                Files.move(tempFile.toPath(), logFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
-            } catch (IOException e2) {
-                plugin.getLogger().warning("Failed to move player data file: " + e2.getMessage());
-            }
+            Files.move(temp, target.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+        } catch (AtomicMoveNotSupportedException e) {
+            Files.move(temp, target.toPath(), StandardCopyOption.REPLACE_EXISTING);
         }
     }
 
-    private void writeDiscoveredChannelsAtomic() {
-        File tempFile = new File(discoveredChannelsFile.getParentFile(), discoveredChannelsFile.getName() + ".tmp");
-        try (PrintWriter writer = new PrintWriter(tempFile)) {
-            writer.println(GSON.toJson(discoveredChannels));
-        } catch (IOException e) {
-            plugin.getLogger().warning("Failed to write discovered channels: " + e.getMessage());
-            return;
-        }
+    private static void normalize(PlayerChannelData data) {
+        if (data.sessions == null) data.sessions = new ArrayList<>();
+        if (data.mods == null) data.mods = new LinkedHashSet<>();
+        if (data.channels == null) data.channels = new LinkedHashSet<>();
+    }
 
-        try {
-            Files.move(tempFile.toPath(), discoveredChannelsFile.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-        } catch (IOException e) {
-            plugin.getLogger().warning("Failed to atomically move discovered channels file: " + e.getMessage());
-            try {
-                Files.move(tempFile.toPath(), discoveredChannelsFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
-            } catch (IOException e2) {
-                plugin.getLogger().warning("Failed to move discovered channels file: " + e2.getMessage());
-            }
+    private static Set<String> copySet(Set<String> value) {
+        return value == null ? null : new LinkedHashSet<>(value);
+    }
+
+    private static PlayerChannelData copy(PlayerChannelData data) {
+        PlayerChannelData result = new PlayerChannelData(data.uuid, data.username);
+        result.mods = copySet(data.mods);
+        result.channels = copySet(data.channels);
+        result.firstSeen = data.firstSeen;
+        result.lastSeen = data.lastSeen;
+        result.totalTimePlayedSeconds = data.totalTimePlayedSeconds;
+        result.sessionCount = data.sessionCount;
+        for (SessionRecord session : data.sessions) {
+            SessionRecord r = new SessionRecord();
+            r.joinTime = session.joinTime;
+            r.leaveTime = session.leaveTime;
+            r.durationSeconds = session.durationSeconds;
+            r.mods = copySet(session.mods);
+            r.added = copySet(session.added);
+            r.removed = copySet(session.removed);
+            r.channels = copySet(session.channels);
+            result.sessions.add(r);
+        }
+        return result;
+    }
+
+    static void trimSessions(PlayerChannelData data, int limit) {
+        if (limit <= 0 || data.sessions.size() <= limit) return;
+        int first = data.sessions.size() - limit;
+        Set<String> baseline = getModsForSession(data.sessions, first);
+        data.sessions = new ArrayList<>(data.sessions.subList(first, data.sessions.size()));
+        SessionRecord session = data.sessions.getFirst();
+        session.mods = baseline;
+        session.added = null;
+        session.removed = null;
+    }
+
+    public synchronized void applyRetention() {
+        for (PlayerChannelData data : playerDataCache.values()) {
+            int before = data.sessions.size();
+            trimSessions(data, plugin.getModFilterConfig().getMaxSessionsPerPlayer());
+            if (before != data.sessions.size()) pendingPlayerDataWrite.set(true);
         }
     }
 
-    public Set<String> getDiscoveredChannels() {
+    public synchronized Set<String> getDiscoveredChannels() {
         return new HashSet<>(discoveredChannels);
     }
 
-    public PlayerChannelData getPlayerData(UUID uuid) {
-        return playerDataCache.get(uuid);
+    public synchronized PlayerChannelData getPlayerData(UUID uuid) {
+        PlayerChannelData data = playerDataCache.get(uuid);
+        return data == null ? null : copy(data);
     }
 
     public File getLogFile() {
@@ -358,7 +412,8 @@ public class DetectionLogger {
     }
 
     public void shutdown() {
-        // Flush any pending writes on shutdown
+        if (writeTask != null) writeTask.cancel();
+        // Wait for an active writer, then flush remaining changes.
         flushPendingWrites();
     }
 
@@ -385,7 +440,7 @@ public class DetectionLogger {
             r.joinTime = joinTime;
             r.leaveTime = leaveTime;
             r.durationSeconds = durationSeconds;
-            r.mods = mods != null && !mods.isEmpty() ? new LinkedHashSet<>(mods) : null;
+            r.mods = mods != null ? new LinkedHashSet<>(mods) : new LinkedHashSet<>();
             r.channels = channels != null && !channels.isEmpty() ? new LinkedHashSet<>(channels) : null;
             return r;
         }
@@ -432,7 +487,7 @@ public class DetectionLogger {
         public String lastSeen;
         public long totalTimePlayedSeconds;
         public int sessionCount;
-        public List<SessionRecord> sessions;
+        public List<SessionRecord> sessions = new ArrayList<>();
 
         // Required for Gson deserialization
         public PlayerChannelData() {}

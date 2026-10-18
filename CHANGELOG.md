@@ -2,6 +2,26 @@
 
 All notable changes to ModDetectorPlugin will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+
+- Initialize session history before use and keep logging failures from preventing kicks.
+- Preserve empty full snapshots and create a full baseline for the first completed session.
+- Snapshot mutable records before asynchronous serialization, serialize file writes, and retry failed saves.
+- Resolve exact mod channels before broad wildcard patterns and suppress repeated alerts for the same mod.
+
+### Added
+
+- `/md explain <player>` reports channel policy rules, kick configuration, and bypass status.
+- `history.max-sessions-per-player` retains 100 recent sessions by default; 0 retains all sessions.
+  Retention preserves lifetime totals and rebases the first retained session into a full snapshot.
+- Regression tests and a Java 21 build workflow.
+
+### Changed
+
+- Document current commands, configuration, JSON Lines storage, retention, and detection limitations.
+
 ## [1.2.3] - 2026-01-18
 
 ### Added

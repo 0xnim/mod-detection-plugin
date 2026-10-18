@@ -53,6 +53,7 @@ public final class ModDetectorPlugin extends JavaPlugin {
                             .then(Commands.literal("reload")
                                     .executes(ctx -> {
                                         modFilterConfig.load();
+                                        detectionLogger.applyRetention();
                                         ctx.getSource().getSender().sendMessage(
                                                 Component.text("[ModDetector] Configuration reloaded.", NamedTextColor.GREEN));
                                         return Command.SINGLE_SUCCESS;
@@ -134,6 +135,22 @@ public final class ModDetectorPlugin extends JavaPlugin {
                                         });
                                         return Command.SINGLE_SUCCESS;
                                     }))
+                            .then(Commands.literal("explain")
+                                    .then(Commands.argument("player", ArgumentTypes.player())
+                                            .executes(ctx -> {
+                                                var selector = ctx.getArgument("player", io.papermc.paper.command.brigadier.argument.resolvers.selector.PlayerSelectorArgumentResolver.class);
+                                                Player target = selector.resolve(ctx.getSource()).getFirst();
+                                                var sender = ctx.getSource().getSender();
+                                                sender.sendMessage(Component.text("Rules for " + target.getName()
+                                                        + "; kick=" + modFilterConfig.isKick()
+                                                        + "; bypass=" + target.hasPermission("moddetector.bypass")));
+                                                Set<String> channels = messageListener.getAllRegisteredChannels()
+                                                        .getOrDefault(target.getUniqueId(), Set.of());
+                                                if (channels.isEmpty()) sender.sendMessage(Component.text("No channels registered this session."));
+                                                channels.stream().sorted().forEach(channel ->
+                                                        sender.sendMessage(Component.text(modFilterConfig.explain(channel))));
+                                                return Command.SINGLE_SUCCESS;
+                                            })))
                             .then(Commands.literal("info")
                                     .then(Commands.argument("player", ArgumentTypes.player())
                                             .executes(ctx -> {
@@ -231,6 +248,7 @@ public final class ModDetectorPlugin extends JavaPlugin {
                             .executes(ctx -> {
                                 var sender = ctx.getSource().getSender();
                                 sender.sendMessage(Component.text("=== ModDetector Commands ===", NamedTextColor.GOLD));
+                                sender.sendMessage(Component.text("/md explain <player> - Explain current channel rules", NamedTextColor.YELLOW));
                                 sender.sendMessage(Component.text("/md reload", NamedTextColor.YELLOW)
                                         .append(Component.text(" - Reload configuration", NamedTextColor.GRAY)));
                                 sender.sendMessage(Component.text("/md status", NamedTextColor.YELLOW)
@@ -284,7 +302,7 @@ public final class ModDetectorPlugin extends JavaPlugin {
     @Override
     public void onDisable() {
         getServer().getMessenger().unregisterIncomingPluginChannel(this);
-        detectionLogger.shutdown();
+        if (detectionLogger != null) detectionLogger.shutdown();
         getLogger().info("ModDetector disabled");
     }
 

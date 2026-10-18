@@ -1,6 +1,6 @@
 # ModDetectorPlugin
 
-A Paper plugin that detects and manages client-side mods through plugin message channels. Server administrators can configure which mods are allowed or blocked, with options to kick players, log detections, or both.
+A Paper plugin that detects and manages client-side mods through plugin message channels. Server administrators can configure which mods are allowed or blocked, with configurable kicks, admin alerts, and session logging.
 
 ## Features
 
@@ -15,7 +15,7 @@ A Paper plugin that detects and manages client-side mods through plugin message 
 
 ## Requirements
 
-- Paper 1.21 or higher
+- Paper 1.21.8 (build and test target)
 - Java 21 or higher
 
 ## Installation
@@ -33,6 +33,10 @@ A Paper plugin that detects and manages client-side mods through plugin message 
 | `/moddetector reload` | Reload configuration | `moddetector.admin` |
 | `/moddetector status` | Show current status | `moddetector.admin` |
 | `/moddetector mods` | List known mod definitions | `moddetector.admin` |
+| `/moddetector players` | List online players with detections | `moddetector.admin` |
+| `/moddetector info <player>` | Show current channels and retained history | `moddetector.admin` |
+| `/moddetector explain <player>` | Explain current channel rules, kick setting, and bypass permission | `moddetector.admin` |
+| `/moddetector discovered` | List channels recorded with log-all-channels | `moddetector.admin` |
 | `/moddetector debug` | Show debug status | `moddetector.admin` |
 
 **Alias:** `/md`
@@ -55,8 +59,8 @@ A Paper plugin that detects and manages client-side mods through plugin message 
 # - blacklist: Block listed mods/patterns, allow everything else
 mode: blacklist
 
-# Action: "kick", "log", or "both"
-action: both
+# Enable kicks for blocked channels
+kick: true
 
 # Kick message (MiniMessage format)
 # Use <mods> placeholder to show detected mods
@@ -80,6 +84,13 @@ notify-admins: true
 
 # Track detections to file
 track-detections: true
+
+# Record every registered channel, including unknown channels
+log-all-channels: false
+
+# Retain recent sessions per player; 0 disables the limit
+history:
+  max-sessions-per-player: 100
 ```
 
 ### Available Mod IDs
@@ -102,15 +113,47 @@ The following mod IDs are pre-configured in `mods.yml`:
 
 ## Detection Logging
 
-When `track-detections: true`, all detections are logged to `plugins/ModDetectorPlugin/detections.txt`:
+When `track-detections: true`, completed sessions with registered channels are stored in
+`plugins/ModDetectorPlugin/detections.json`. Despite its filename, this file uses JSON Lines:
+one player record per line. Records include UUID, name, lifetime totals, aggregate mods and
+channels, and retained sessions. Session records use full snapshots or added/removed deltas.
+An empty full snapshot means no known mods; missing snapshot and delta fields mean unchanged.
 
-```
-[2024-01-15 14:30:22] uuid-here | PlayerName | Xaero's World Map, Jade
-```
+Writes are batched every 30 seconds and flushed on shutdown. Failed writes are retried.
+An unexpected process exit can lose changes since the last successful write.
+With `log-all-channels: true`, registrations also update player records and
+`discovered-channels.json`, a JSON array of all discovered channels.
+
+`history.max-sessions-per-player` defaults to 100. Retention applies on startup, reload,
+and session completion. The first retained session becomes a full snapshot. Lifetime totals,
+aggregate mod/channel sets, and discovered channels remain unchanged. This limit does not
+remove player records or limit the number of players. Set it to 0 for unlimited sessions.
+Back up existing data before lowering the limit; removed sessions cannot be restored automatically.
+Old history already corrupted by missing empty snapshots cannot always be recovered.
+
+## Rule matching
+
+In blacklist mode, matching configured rules block a channel. In whitelist mode, those same
+rules allow a channel and unmatched channels are blocked. The `blocked-mods` setting is used
+in both modes despite its name. `custom-patterns` accepts `*` for any sequence and `?` for one
+character. Matching ignores case. Custom mod definitions belong in `config.yml` under
+`custom-mods`; the built-in `mods.yml` is loaded from the plugin JAR.
+
+Mod identification prefers exact channels, then wildcard patterns with more literal characters.
+Ties use alphabetical pattern and mod ID order. Identification is separate from enforcement:
+`servux:litematics` is named Litematica, but a configured `servux:*` rule still matches it.
+Use `/md explain <player>` to inspect each registered channel and its matching policy rule.
+The output also shows whether kicks are enabled and whether the player has bypass permission.
+Repeated detections of the same mod produce one alert per session.
+
+For observation without kicks or admin alerts, set `kick: false` and `notify-admins: false`.
+Console detection messages remain enabled.
 
 ## How It Works
 
-ModDetectorPlugin monitors plugin message channels that clients register when connecting. Many client-side mods register channels to communicate with servers, even if the server doesn't have a corresponding plugin. By detecting these channel registrations, the plugin can identify which mods a player is using.
+ModDetectorPlugin monitors plugin message channels that clients register when connecting. Many client-side mods register channels to communicate with servers, even if the server doesn't have a corresponding plugin. These registrations provide evidence of matching mod channels. They do not prove which mods are installed.
+Mods without registered channels are invisible to this plugin. Clients can omit or imitate channels,
+and shared libraries can make identification ambiguous. Do not treat this plugin as comprehensive anti-cheat protection.
 
 ## Building
 
@@ -118,7 +161,8 @@ ModDetectorPlugin monitors plugin message channels that clients register when co
 ./gradlew build
 ```
 
-The compiled JAR will be in `build/libs/`.
+Use Java 21 to run the included Gradle wrapper. The compiled JAR will be in `build/libs/`.
+Run `./gradlew test` for regression tests. Test JVMs run with AWT headless mode enabled.
 
 ## License
 

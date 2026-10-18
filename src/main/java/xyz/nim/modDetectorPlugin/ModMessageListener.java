@@ -84,7 +84,11 @@ public class ModMessageListener implements Listener, PluginMessageListener {
         if (channels.add(channel)) {
             // New channel registered - log to file if log-all-channels is enabled
             if (config.isLogAllChannels()) {
-                detectionLogger.logChannelRegistration(player, channel, sessionStartTimes.get(uuid));
+                try {
+                    detectionLogger.logChannelRegistration(player, channel, sessionStartTimes.get(uuid));
+                } catch (RuntimeException e) {
+                    plugin.getLogger().warning("Failed to log channel: " + e.getMessage());
+                }
             }
         }
 
@@ -142,7 +146,7 @@ public class ModMessageListener implements Listener, PluginMessageListener {
                 }
             }
 
-            detectionLogger.logDetection(player, sessionMods, sessionUnknownChannels, joinTime, leaveTime);
+            logSession(player, sessionMods, sessionUnknownChannels, joinTime, leaveTime);
         }
     }
 
@@ -152,6 +156,8 @@ public class ModMessageListener implements Listener, PluginMessageListener {
         String modName = config.getModName(channel);
         Set<String> playerMods = detectedChannels.computeIfAbsent(uuid, k -> ConcurrentHashMap.newKeySet());
         boolean isNewDetection = playerMods.add(modName);
+
+        if (!isNewDetection) return;
 
         // Always log to console
         String logMessage = config.formatLogMessage(player.getName(), channel);
@@ -208,7 +214,7 @@ public class ModMessageListener implements Listener, PluginMessageListener {
             sessionMods.addAll(blockedMods);
         }
 
-        detectionLogger.logDetection(player, sessionMods, sessionUnknownChannels, joinTime, kickTime);
+        logSession(player, sessionMods, sessionUnknownChannels, joinTime, kickTime);
 
         String modList = String.join(", ", blockedMods);
         Component kickComponent = miniMessage.deserialize(
@@ -217,6 +223,15 @@ public class ModMessageListener implements Listener, PluginMessageListener {
         );
 
         player.kick(kickComponent);
+    }
+
+    private void logSession(Player player, Set<String> mods, Set<String> channels, Instant join, Instant leave) {
+        try {
+            detectionLogger.logDetection(player, mods, channels, join, leave);
+        } catch (RuntimeException e) {
+            plugin.getLogger().log(java.util.logging.Level.WARNING,
+                    "Failed to log session for " + player.getName(), e);
+        }
     }
 
     public Map<UUID, Set<String>> getDetectedChannels() {

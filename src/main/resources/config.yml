@@ -81,7 +81,12 @@ log-all-channels: false
 # Notify players with permission "moddetector.notify" when a mod is detected
 notify-admins: true
 
-# Track all detections to a file (plugins/ModDetectorPlugin/detections.txt)
+# Track all detections to a file (plugins/ModDetectorPlugin/detections.json)
 # Records UUID, username, timestamp, and detected mods for each player
 # Useful for tracking players who attempted to use blocked mods
 track-detections: true
+
+# Maximum recent sessions retained per player. 0 keeps all sessions.
+# Applies on startup, reload, and session completion. Lifetime totals remain.
+history:
+  max-sessions-per-player: 100
