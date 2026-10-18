@@ -1,5 +1,6 @@
 # Known Mod Definitions
 # Each mod has a name, description, and list of channel patterns
+# Payload definitions do not guarantee client registration on a Paper server.
 
 mods:
   xaeros-worldmap:
@@ -51,12 +52,27 @@ mods:
     description: "Voice chat mod"
     channels:
       - "voicechat:*"
+      - "vc:update_state"
+      - "vc:request_secret"
+      - "vc:create_group"
+      - "vc:set_group"
+      - "vc:leave_group"
+      - "vc:secret"
+      - "vc:state"
+      - "vc:states"
+      - "vc:remove_state"
+      - "vc:add_group"
+      - "vc:remove_group"
+      - "vc:joined_group"
+      - "vc:add_category"
+      - "vc:remove_category"
 
   noxesium:
     name: "Noxesium"
     description: "Performance/feature mod for MCC and servers"
     channels:
       - "noxesium-v2:*"
+      - "noxesium-v3:*"
 
   flashback:
     name: "Flashback"
@@ -88,10 +104,11 @@ mods:
     channels:
       - "fabric:*"
       - "fabric-screen-handler-api-v1:*"
+      - "fabric-menu-api-v1:open_screen"
 
   cardinal-components:
     name: "Cardinal Components API"
-    description: ".."
+    description: "Shared component synchronization library"
     channels:
       - "cardinal-components:*"
 
@@ -429,3 +446,93 @@ mods:
     channels:
       - "norisk:*"
 
+  carpet:
+    name: "Carpet"
+    description: "Carpet server mod and client compatibility features."
+    channels:
+      - "carpet:hello"
+
+  tweakeroo:
+    name: "Tweakeroo"
+    description: "Client tweaks with optional Servux data support."
+    channels:
+      - "servux:tweaks"
+
+  wthit:
+    name: "WTHIT / Waila protocol"
+    description: "Block and entity information overlay."
+    channels:
+      - "waila:version"
+      - "waila:plugin"
+      - "waila:config"
+      - "waila:blacklist"
+      - "waila:block"
+      - "waila:entity"
+      - "waila:config_sync_req"
+      - "waila:ctx"
+      - "waila:ctx_typed"
+      - "waila:data"
+      - "waila:data_typed"
+      - "waila:generate_client_dump"
+
+  jei:
+    name: "Just Enough Items (JEI)"
+    description: "Recipe and item viewing interface."
+    channels:
+      - "jei:set_hotbar_item_stack"
+      - "jei:delete_player_item"
+      - "jei:cheat_permission"
+      - "jei:request_cheat_permission"
+      - "jei:give_item_stack"
+      - "jei:recipe_transfer"
+      - "jei:recipe_transfer_counted"
+      - "jei:recipe_transfer_result"
+      - "jei:recipe_transfer_with_result"
+      - "jei:recipe_transfer_counted_with_result"
+
+  emi:
+    name: "EMI"
+    description: "Recipe and item viewing interface."
+    channels:
+      - "emi:fill_recipe"
+      - "emi:create_item"
+      - "emi:command"
+      - "emi:chess"
+      - "emi:ping"
+
+  emotecraft:
+    name: "Emotecraft"
+    description: "Emote playback and emote stream synchronization."
+    channels:
+      - "emotecraft:emote"
+      - "emotecraft:stream"
+
+  figura:
+    name: "Figura"
+    description: "Player avatar customization mod."
+    channels:
+      - "figura:c2s/handshake"
+      - "figura:c2s/avatars/delete"
+      - "figura:c2s/avatars/equip"
+      - "figura:c2s/avatars/fetch"
+      - "figura:c2s/avatars/owned"
+      - "figura:c2s/userdata"
+      - "figura:c2s/ping"
+      - "figura:c2s/avatars/upload"
+      - "figura:s2c/avatar_ready"
+      - "figura:s2c/avatar_deleted"
+      - "figura:refused"
+      - "figura:s2c/handshake"
+      - "figura:s2c/connected"
+      - "figura:s2c/stream/init"
+      - "figura:s2c/owned_avatars"
+      - "figura:s2c/ping/error"
+      - "figura:s2c/ping"
+      - "figura:s2c/userdata"
+      - "figura:s2c/userdata_not_found"
+      - "figura:s2c/notify"
+      - "figura:stream/allow_in"
+      - "figura:avatars/data"
+      - "figura:stream/close_in"
+      - "figura:stream/close_out"
+      - "figura:ping/server"
